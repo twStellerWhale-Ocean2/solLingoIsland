@@ -29,6 +29,7 @@ public partial class ResultWindow : Window
 {
     private ISpeechService? _speech;
     private bool _isLoading;
+    private bool _closing;
     private readonly UiStateStore _ui;
 
     public ResultWindow()
@@ -38,7 +39,7 @@ public partial class ResultWindow : Window
         ApplyBounds();
         HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
         ResizeGrip.DragDelta += OnResizeDelta;
-        CloseBtn.Click += (_, _) => Close();
+        CloseBtn.Click += (_, _) => CloseOnce();
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
@@ -80,8 +81,20 @@ public partial class ResultWindow : Window
         Height = Math.Max(MinHeight, Height + e.VerticalChange);
     }
 
+    /// <summary>只關一次：避免關閉過程中 OnDeactivated／ESC 再次呼叫 Close（WPF 會擲「closing」例外）。</summary>
+    private void CloseOnce()
+    {
+        if (_closing)
+        {
+            return;
+        }
+        _closing = true;
+        Close();
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
+        _closing = true;
         var b = RestoreBounds;
         if (b.Width > 0 && !double.IsNaN(b.Left))
         {
@@ -249,7 +262,7 @@ public partial class ResultWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            Close();
+            CloseOnce();
         }
     }
 
@@ -258,7 +271,7 @@ public partial class ResultWindow : Window
         base.OnDeactivated(e);
         if (!_isLoading)
         {
-            Close();
+            CloseOnce();
         }
     }
 }
