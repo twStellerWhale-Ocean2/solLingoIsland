@@ -1,0 +1,529 @@
+---
+name: solScreenEnglishTrans1
+date: 2026/7/3
+formatVersion: "3.2"
+description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 系統匣常駐、Alt+L 熱鍵喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀。
+---
+
+> **閱讀方式**：依「I 方案設計→II 系統設計→III 模組設計」逐層 zoom-in，每層為 A.主旨摘要／B.運作想定／C.組態設定／D.規格效益（成效驗收併入各層 D，需求層 I.D 回扣需求）。
+> - **本版為 MVP**：單次查詢流程（常駐＋熱鍵＋框選＋辨識翻譯＋顯示朗讀）做深做透；歷史紀錄、生詞本、多語言、設定介面留待後續增量。
+> - **方法論偏離聲明（待 USR 於 Draft PR 裁決）**：本方案 techApp＝[techApp桌面查詢工具]（非指管類），FORMAT §2 核／殼 OODA 模型與 MD3 web admin shell 不適用；本設計改以「三段管線（capture→query→present）＋供應商可抽換」為擴充機制，人機介面錨 Windows 11 Fluent Design（詳各層 C.(C)）。techStack 採候選契約 [techStackDotnetWin]（封閉家規四選一無桌面選項，新增待裁決）。
+> - **命名**：類型前綴 `orgsopcat#N-／orgSop#N-／teamXXX／teamSop#N.M-／prsnXXX／prsnSop#N.M.K-`；`[物件]` 與 `值` 區分；詞彙見 GLOSSARY。
+
+# I. 方案設計
+
+> 需求視角；使用者之初始需求。只談「使用者是誰、做什麼、要什麼」，不預設解法。
+
+## A. 主旨摘要
+
+> 本節一段話定調：本層在做什麼、視角為何。（逐字繼承 Issue #1 ＜I. 緣起目的＞種子）
+
+* 需求方為 [USR] 本人（遊戲玩家兼英文學習者）。
+* 需求為：遊玩英文遊戲時，能以一組熱鍵框選畫面任意區塊，立即取得該區塊英文之原文、KK 音標、繁體中文翻譯，並可聆聽原文發音，全程不中斷遊戲。
+* MVP 範圍：背景常駐＋熱鍵喚起＋變暗選區＋單次辨識翻譯查詢＋浮動視窗顯示與朗讀；不含歷史紀錄、生詞本、多語言、設定介面。
+
+## B. 運作想定
+
+> 本節四分：(A) 資訊架構／(B) 人員編組／(C) 動作項目／(D) 軟硬項目。(A) 先圖後條列；(B)(C) 以表格呈現。
+
+### (A) 資訊架構
+
+> 描述本層方案與外部之運作關係與部署環境偏好。
+
+運作關係（sol 與外部）：
+
+```mermaid
+flowchart LR
+
+USR["[Org使用者]<br/>(玩家兼英文學習者)"]
+GAME["[遊戲畫面]<br/>(無邊框視窗化前景應用)"]
+SOL["[solScreenEnglishTrans1方案]"]
+OPENAI["[OpenAI平台]<br/>(vision API，使用者自備金鑰)"]
+SPEECH["[Windows內建語音]<br/>(英文語音包)"]
+
+USR -->|"熱鍵框選／查看聆聽"| SOL
+SOL -->|"截取選區影像"| GAME
+SOL -->|"辨識翻譯查詢"| OPENAI
+SOL -->|"原文朗讀"| SPEECH
+```
+
+> 圖例：`-->` 需求層運作關係（正式介面契約於 ＜II＞／＜III＞ 落地）。
+
+部署環境（需求偏好）：
+
+```mermaid
+flowchart LR
+
+SOL["[solScreenEnglishTrans1方案]"]
+ENV["[Windows11桌面]<br/>(使用者遊戲主機，含多螢幕與DPI縮放)"]
+
+SOL -.->|"常駐於"| ENV
+```
+
+> 圖例：`-.->` 部署／配置關係。
+
+#### sol 查詢工具
+
+solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（見 ＜II＞）。
+
+#### 外部關聯項目
+
+遊戲畫面（查詢對象、非介接系統）、OpenAI 平台（辨識翻譯外部服務）、Windows 內建語音（朗讀引擎）。
+
+#### 部署偏好
+
+使用者自有 Windows 11 遊戲主機，免安裝、單一執行檔、系統匣常駐。
+
+### (B) 人員編組
+
+> 以表格描述本層人員／組織（Org 與外部關聯對象）：對象｜關係｜說明。
+
+| 關聯對象 | 關係 | 說明 |
+| --- | --- | --- |
+| Org使用者 | 本方案使用者 | 玩家兼英文學習者，單人使用並自行維保；內部 team 見 ＜II＞ |
+| 遊戲畫面 | 查詢對象 | 前景執行之英文遊戲（無邊框視窗化前提），本方案僅截取其畫面、不介接 |
+| OpenAI平台 | 外部服務商 | 提供 vision 辨識翻譯服務；額度與金鑰由使用者自備 |
+| Windows內建語音 | 外部依賴 | OS 內建英文語音包，供原文朗讀 |
+
+### (C) 動作項目
+
+> 以表格描述本層動作／SOP（orgsopcat/orgSop→teamSop→prsnSop 逐層 zoom）；編號全程上下對應。
+
+| orgsopcat 大類 | orgSop 職責 | 說明 |
+| --- | --- | --- |
+| **orgsopcat#1-遊戲查詢** | orgSop#1-畫面選區查詢 | 遊戲中熱鍵喚起、框選畫面區塊、取得原文／音標／中譯、查看聆聽後返回遊戲 |
+| **orgsopcat#2-系統維保** | orgSop#2-工具安裝維保 | 程式放置、金鑰設定、常駐啟動與結束、異常排除、移除 |
+
+### (D) 軟硬項目
+
+> 本層所需之設備、外部系統與服務（需求視角；細部選型見 C.技術選型）。
+
+* **使用者遊戲主機**：Windows 11（或 Windows 10 1903+）桌面環境，含多螢幕與 DPI 縮放情境。
+* **遊戲畫面**：以無邊框視窗化（borderless windowed）執行之英文遊戲（使用前提；獨占全螢幕不支援）。
+* **OpenAI vision API**：使用者自備金鑰與額度之外部辨識翻譯服務。
+* **Windows 內建語音**：OS 內建英文語音包（朗讀用，離線可用）。
+
+## C. 組態設定
+
+> 本節四分：(A) 技術選型／(B) 關鍵參數／(C) 人機介面／(D) 部署做法。
+
+### (A) 技術選型
+
+> 依 FORMAT §2.5 三層技術選型契約宣告；本層宣告系統類型 techApp。平台 techStack 與元件 techItem 見 ＜II.C.(A)＞／＜III.C.(A)＞。
+
+* **techApp（系統類型）＝ [techApp桌面查詢工具]**（桌面即時查詢工具：常駐背景、熱鍵喚起、即查即走）：綁該契約之最低能力清單（§A：常駐輕量、喚起即時、零輸入干擾、隨時可逃、明確錯誤降級、金鑰安全、多螢幕 DPI 正確）與不干擾介面 bar（§B），逐頁審查據以判讀；不在此複述。
+* **點名強制 techItem**（見 [techApp桌面查詢工具] §C，本方案輸出含發音朗讀）：[techItem語音合成]；具體選型於 ＜III.C.(A)＞ 落地。
+
+### (B) 關鍵參數
+
+> 列本層關鍵參數／組態（需求偏好→etyCfg→Env／appsettings）；列舉即可、不解釋。
+
+* **金鑰**：`OPENAI_API_KEY` 一律環境變數，程式與 repo 不落地（spec#5）。
+* **熱鍵**：`Alt+L`（左右 Alt 皆可），MVP 固定。
+* **查詢模型**：預設 `gpt-4o-mini`，可調（appsettings）。
+* **使用前提**：遊戲無邊框視窗化。
+
+### (C) 人機介面
+
+> 本層定**各 orgSop 走何種介面通道**，並定整體視覺（look）；互動分配見 ＜II.C.(C)＞、各頁配置見 ＜III.C.(C)＞。
+
+各 orgSop 之介面通道：
+
+| orgSop | 通道 | 說明 |
+| --- | --- | --- |
+| orgSop#1-畫面選區查詢 | **桌面原生 GUI**（遮罩 overlay＋浮動視窗） | 熱鍵喚起、鍵盤滑鼠即查即走，不開常駐主視窗 |
+| orgSop#2-工具安裝維保 | **系統匣選單頁＋OS 標準設定** | 常駐狀態與結束走系統匣；安裝金鑰、移除走檔案總管與環境變數設定 |
+
+**業界常規（look，公開標準）**：Windows 桌面工具遵循 **Windows 11 Fluent Design**（Segoe UI Variable 字階、4px 間距格、圓角 8px、亮暗主題、acrylic／mica 層次），可近用性掛 **WCAG 2.1 AA** 對比；系統匣常駐應用遵循 tray app 慣例（無主視窗、右鍵選單、單一實例）。
+
+**本系統（solScreenEnglishTrans1 取捨）**：
+
+* **遮罩**：全螢幕 45% 黑色半透明變暗、十字游標、高對比選框（accent 藍 2px＋反白遮罩差顯）、頂部中央一行操作提示——只承載「選取」一件事。
+* **結果視窗**：暗色卡片（近黑底、圓角、細邊框），三區直排（原文／KK 音標／中譯）＋播放鈕；出現於選區旁不遮擋原文；`ESC` 或點外即關。
+* **偏離聲明**：本方案為桌面原生應用，不錨 [hmiIntf通用視覺規範]（MD3 web 基座、admin shell 不適用），改錨 [techApp桌面查詢工具] §B 不干擾介面 bar；可近用性維持 WCAG 精神。
+
+主題風格示意圖（設計期參考稿、以文字為準）：
+
+![主題風格示意圖：暗色遮罩選取與結果卡片](design-visual/look.png)
+
+### (D) 部署做法
+
+> 描述本層部署作法：大方向。
+
+* **免安裝單一 exe**：self-contained 發佈，複製即用；系統匣常駐、不開主視窗。
+* 開發 REPO＝`twMoonBear-Laboratory/solScreenEnglishTrans1`（私有）。
+* productReadme 為自然語言操作腳本，供自然人或 AI Agent 依步驟執行。
+
+## D. 規格效益
+
+> 需求規格（need）＋其端對端驗收課目與效益指標；以本層需求回扣全案。need 不出現解法元件名。
+
+### (A) 規格要求
+
+> need（spec#N，客戶目的／營運議題／成效期待，不混工程手段；粒度一致互不包含）＋端對端驗收課目（e2eTest，以 orgSop 為驗收單元、依 productReadme）。（spec 逐字繼承 Issue #1 種子）
+
+* **spec#1-可背景常駐與熱鍵喚起**：程式以系統匣常駐背景，遊戲中按 `Alt+L`（左右 Alt 皆可）即喚起查詢流程，不中斷遊戲操作；再次可用 `ESC` 隨時取消。
+* **spec#2-可框選畫面查詢區塊**：喚起後全螢幕變暗，滑鼠拖曳框選欲查詢之畫面區塊，放開即完成選取；多螢幕與 DPI 縮放環境下選區對位正確。
+* **spec#3-可辨識並翻譯選區英文**：對選區影像內之英文進行辨識，回傳英文原文、KK 音標、繁體中文翻譯三項內容。
+* **spec#4-可查看並聆聽查詢結果**：查詢結果以浮動視窗顯示（原文／音標／中譯），提供播放按鈕朗讀英文原文（Windows 內建語音），`ESC` 關閉視窗。
+* **spec#5-查詢使用自備額度且金鑰不落地**：辨識翻譯使用 [USR] 自備之 OpenAI API 額度（讀 `OPENAI_API_KEY` 環境變數），程式與 repo 不儲存任何金鑰。
+
+**端對端驗收課目（e2eTest，依 productReadme，每 orgSop 至少一案，回扣 orgSop／spec）**：
+
+* **e2eTest#01-工具安裝維保**（依 orgSop#2、docProgTest#01）：放置 exe、設定金鑰、啟動常駐、確認系統匣圖示與熱鍵可用、結束、移除 → 全程依 README 可完成、無殘留。
+* **e2eTest#02-畫面選區查詢一圈**（依 orgSop#1、docProgTest#02）：於無邊框視窗化前景應用按 `Alt+L`、框選英文區塊、等待查詢、查看三欄結果、播放朗讀、`ESC` 關閉返回 → 全圈閉合、選區對位正確、結果三欄齊備、`ESC` 任一階段可逃。
+
+### (B) 效益指標
+
+> 每條 spec 一項追蹤指標（評估方式／觀察項目），**回扣本需求**。
+
+* **spec#1**：常駐閒置記憶體（<100MB）、熱鍵喚起延遲（<300ms）與成功率、遊戲操作是否被中斷。
+* **spec#2**：多螢幕與 DPI 縮放下選區對位誤差（0px 目標）、`ESC` 取消成功率。
+* **spec#3**：辨識翻譯正確性抽測（遊戲字型樣本）、單次查詢延遲（1～3 秒目標）。
+* **spec#4**：結果三欄位齊備率、TTS 播放成功率與重複播放行為正確性。
+* **spec#5**：金鑰不落地稽核（repo／程式檔／設定檔掃描無金鑰）、單次查詢成本觀察。
+
+# II. 系統設計
+
+> 視角＝team。自 ＜I＞ 的 Org／orgSop 解析出團隊（team）與其作業（teamSop），並界定方案下屬之系統（sys）。不出現 prsn／module。
+
+## A. 主旨摘要
+
+> 本節一段話定調：本層在做什麼、視角為何。
+
+方案以單一桌面常駐系統 [sysScreenTrans系統] 承接需求，核心為**三段管線**：**capture**（常駐熱鍵→遮罩框選→選區截圖）→ **query**（單次 vision 查詢→結構化三欄結果）→ **present**（浮動視窗顯示＋TTS 朗讀）。管線各段責任分離、以資料契約銜接；query 段之供應商（模型名稱、prompt）走組態可抽換，為本案之擴充機制。**方法論偏離**：本方案 techApp 為桌面查詢工具、非指管管理系統，FORMAT §2 核／殼 OODA 模型不適用（無管理閉環、無領域殼、無任務域），偏離已於文件頭宣告、待 USR 裁決。MVP 實例化範圍＝單次查詢一圈做深做透。
+
+## B. 運作想定
+
+> 本節四分：(A) 資訊架構／(B) 人員編組／(C) 動作項目／(D) 軟硬項目。(A) 先圖後條列；(B)(C) 以表格呈現。
+
+### (A) 資訊架構
+
+> 先圖後條列，描述本層系統與其組成（方案→sys 逐層 zoom）。
+
+運作架構圖（方案內含人員＋系統，sol 下屬 sys）：
+
+```mermaid
+flowchart LR
+
+subgraph SOL["[solScreenEnglishTrans1方案]"]
+  T1["team遊戲查詢"]
+  T2["team工具維保"]
+  SYS["[sysScreenTrans系統]"]
+  T1 ==>|"comIntf自訂本機桌面操作"| SYS
+  T2 ==>|"comIntf自訂本機桌面操作"| SYS
+end
+
+OPENAI["[OpenAI平台]"]
+SPEECH["[Windows內建語音]"]
+SYS ==>|"comIntf通用HTTPS連線<br/>(附掛 apiIntf標準OPENAI的API協定)"| OPENAI
+SYS ==>|"techItem語音合成"| SPEECH
+```
+
+> 圖例：`==>` 通訊／承載（線上標 comIntf 契約名，apiIntf 並列附掛）。
+
+組態架構圖（techStack 以文字標於建置單元方框）：
+
+```mermaid
+flowchart BT
+
+subgraph SOL["[solScreenEnglishTrans1方案]"]
+  ADM["team工具維保"]
+  SYS["[sysScreenTrans系統]<br/>組態：etyCfg自訂sysScreenTrans組態<br/>techStack：techStackDotnetWin(候選)"]
+  ADM -.->|"setWi自訂Usr安裝設定金鑰"| SYS
+  ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
+  ADM -.->|"setWi自訂Usr移除工具"| SYS
+end
+
+ENV["[Windows11桌面]"]
+SYS -.->|"常駐於"| ENV
+```
+
+> 圖例：`-.->` 配置作業（線上標 setWi）、techStack 選型（文字標記）。
+
+* **sol 下屬 sys**：[sysScreenTrans系統]——實現常駐熱鍵、遮罩框選截圖、vision 查詢與結果呈現朗讀之單一系統；內部 module 見 ＜III＞。
+  * **對外保證**（機制見 ＜III.B.(A)＞）：喚起即時且零輸入干擾（spec#1）、選區對位正確（spec#2）、查詢結果三欄齊備或明確錯誤降級（spec#3）、隨時可逃（spec#1／#4）、金鑰不落地（spec#5）。
+* **管線契約（pipeline contract；本案擴充機制，取代核／殼契約之位置）**：三段各以資料契約銜接、責任不互滲——
+  * 〔capture〕輸入＝熱鍵事件／滑鼠拖曳；輸出＝選區影像（實際像素對位）。不認查詢語意。
+  * 〔query〕輸入＝選區影像；輸出＝[datIntf自訂查詢結果格式]（原文／音標／中譯）。供應商、模型、prompt 走組態抽換，不動 capture／present。
+  * 〔present〕輸入＝[datIntf自訂查詢結果格式]；輸出＝浮動視窗與 TTS 播放。不認辨識來源。
+* **異常降級一致**：金鑰缺失、網路失敗、逾時、回應不合格式，一律於 present 段顯示明確可讀錯誤與下一步指引（[runWi自訂Sys辨識翻譯選區]），程式續存活。
+
+### (B) 人員編組
+
+> 以表格描述本層團隊編成（Org 下屬 team）：team｜上級／編成位置｜職責。單人方案：兩 team 皆由 [Org使用者] 本人擔任（角色分工、非多人）。
+
+| team | 上級／編成位置 | 職責 |
+| --- | --- | --- |
+| team遊戲查詢（#1） | Org使用者（遊戲中） | 熱鍵喚起、框選查詢、查看聆聽結果 |
+| team工具維保（#2） | Org使用者（維保時） | 程式放置、金鑰設定、常駐啟動結束、移除 |
+
+### (C) 動作項目
+
+> 以表格描述本層動作／SOP；每條 orgSop 由其 team 承接為多條 teamSop。
+
+> **derived 標記**：本層 teamSop 為 ＜III＞ prsnSop 之上捲視圖（維護改 III、此處重生），勿獨立增刪；編號全程上下對應。
+
+| team（承 orgSop#） | teamSop |
+| --- | --- |
+| team遊戲查詢（#1） | teamSop#1.1-熱鍵喚起與框選擷取<br>teamSop#1.2-辨識翻譯查詢<br>teamSop#1.3-結果查看與朗讀 |
+| team工具維保（#2） | teamSop#2.1-安裝與金鑰設定<br>teamSop#2.2-常駐啟動與結束<br>teamSop#2.3-工具移除 |
+
+### (D) 軟硬項目
+
+> 本層方案所依賴之平台與服務。
+
+* **執行平台**：Windows 11 桌面（多螢幕、DPI 縮放），免安裝單一 exe 常駐。
+* **外部服務**：OpenAI vision API（[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]，使用者自備金鑰）。
+* **OS 內建能力**：Windows 內建語音（[techItem語音合成]）、全域熱鍵、螢幕擷取、系統匣。
+
+## C. 組態設定
+
+> 本節四分：(A) 技術選型／(B) 關鍵參數／(C) 人機介面／(D) 部署做法。
+
+### (A) 技術選型
+
+> 平台 techStack（承 ＜I.C.(A)＞ techApp=桌面查詢工具）；標於 ＜B.(A)＞ 組態架構圖。見 FORMAT §2.5。
+
+* **techStack（平台）＝ [techStackDotnetWin]（候選契約，待家規裁決）**：.NET 8＋WPF、self-contained 單一 exe、手動放置部署。現行家規四選一（StaticWeb／ReactWeb／NodeSys／PythonSys）皆為 web／伺服器類、無法承載原生桌面需求（全域熱鍵、螢幕擷取、系統匣），故以候選契約提出、隨本增量 Draft PR 請 USR 裁決入庫。
+* **techItem（元件，承 [techApp桌面查詢工具] 強制）**：[techItem語音合成]（原文朗讀）；具體版本／用法見 ＜III.C.(A)＞。
+
+### (B) 關鍵參數
+
+> 列本層關鍵參數／組態；列舉即可、不解釋。
+
+* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramTtsVoice=系統預設`（appsettings）。
+
+### (C) 人機介面
+
+> 本層定**各 teamSop 的功能如何分配到互動面**（IA）；整體視覺見 ＜I.C.(C)＞、各頁配置見 ＜III.C.(C)＞。
+
+**業界常規（IA，公開標準）**：桌面常駐工具無導覽樹（非管理網站，MD3 adaptive navigation 不適用——偏離已於文件頭宣告）；互動架構採 **hotkey-first 狀態流**（Windows tray app＋Snipping Tool 選取慣例）：常駐（無 UI）→ 熱鍵喚起（遮罩）→ 框選（橡皮筋）→ 查詢（進度）→ 結果（卡片）→ 關閉返回；維運入口集中於系統匣右鍵選單。**NN/g progressive disclosure** 精神落於「平時零 UI、按需逐層現身」。
+
+**導覽衍生（IA ⟵ SOP；硬規則④之桌面對應）**：`teamSop#1.1→選區遮罩頁`、`teamSop#1.2／#1.3→查詢結果頁`、`teamSop#2.2／#2.3→系統匣選單頁`；`teamSop#2.1`（安裝金鑰）走 OS 標準設定、不在本系統 UI 內。
+
+**反擁擠定調**：遮罩只做選取、結果視窗只做呈現與朗讀、系統匣選單頁只做維運；嚴禁把設定、歷史、選項塞進查詢動線。
+
+版面設定示意圖（涵蓋遊戲查詢與工具維保兩域之互動面；設計期參考稿、以文字為準）：
+
+![版面設定示意圖：hotkey-first 狀態流與各互動面配置](design-visual/ia.png)
+
+### (D) 部署做法
+
+> 描述本層部署作法。
+
+* **首版實作範圍（MVP）**：單次查詢一圈（常駐→熱鍵→框選→查詢→顯示朗讀→關閉）做深做透，過逐頁審查後才擴充。
+* **方案層（e2e 環境）**：於 Windows 11 實機以發佈之單一 exe 執行 ＜III.D＞ intTest 與 ＜I.D＞ e2eTest。
+* 各建置單元之建置／測試／部署指令見 ＜III.C.(D) 部署做法＞。
+
+## D. 規格效益
+
+> 系統層工程驗證（規格要求＝品管測試）；效益回扣需求層。
+
+### (A) 規格要求
+
+> 系統層品管測試：組態符合性（cfgTest）與文件程式化（docProgTest）。
+
+**組態符合性測試（cfgTest）**：
+
+| 代號 | 測試對象 | 通過判定 |
+| --- | --- | --- |
+| cfgTest#01 | [etyCfg自訂sysScreenTrans組態] | 實作與部署組態符合契約規範（金鑰僅環境變數、appsettings 預設值正確） |
+
+**文件程式化測試（docProgTest）**（通過判定皆為「自然人或 AI Agent 可依 productReadme 完成對應流程」）：
+
+* **docProgTest#01-工具安裝維保**（orgSop#2）：放置 exe、設定金鑰、啟動常駐、結束、移除。
+* **docProgTest#02-畫面選區查詢一圈**（orgSop#1）：熱鍵喚起、框選、查詢、查看聆聽、關閉返回。
+
+### (B) 效益指標
+
+> 系統層效益回扣需求層；指標正本見 ＜I.D.(B) 效益指標＞（每 spec 一項），本層不重列、僅標承接。
+
+* 本層之 cfgTest／docProgTest 全綠為「系統設計可被工程驗證」之效益門檻；對 spec#1–5 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
+
+# III. 模組設計
+
+> 視角＝prsn。自 ＜II＞ 的 team／teamSop 解析出一線操作者（prsn）與其工作項（WI），並界定模組（module）與模組間介面。系統＝[sysScreenTrans系統]。
+
+## A. 主旨摘要
+
+> 本節一段話定調：本層在做什麼、視角為何。
+
+[sysScreenTrans系統] 為單一 WPF exe，內部由三模組構成（單一 csproj、以資料夾＋namespace 分模組）：[modCapture模組] **常駐與擷取**——系統匣常駐、`RegisterHotKey` 全域熱鍵、全螢幕變暗遮罩與橡皮筋框選、實際像素對位截圖；[modQuery模組] **辨識翻譯查詢**——依 [apiIntf標準OPENAI的API協定] 單次 vision 呼叫、解析為 [datIntf自訂查詢結果格式]、異常降級；[modPresent模組] **呈現與朗讀**——浮動結果視窗、[techItem語音合成] TTS 播放。模組間以 C# interface（in-process）銜接，邊界對齊 ＜II＞ 管線契約；模組內部留白歸 code。
+
+## B. 運作想定
+
+> 本節四分：(A) 資訊架構／(B) 人員編組／(C) 動作項目／(D) 軟硬項目。(A) 先圖後條列；(B)(C) 以表格呈現。
+
+### (A) 資訊架構
+
+> 先圖後條列，描述本層系統與其組成（sys 下屬 module）。
+
+運作架構圖（sys 下屬 module）：
+
+```mermaid
+flowchart TB
+
+PRSN["[prsn玩家]"]
+
+subgraph SYS["[sysScreenTrans系統]（單一 WPF exe）"]
+  CAP["[modCapture模組]<br/>系統匣常駐＋全域熱鍵＋遮罩框選＋截圖"]
+  QRY["[modQuery模組]<br/>vision 查詢＋結果解析＋異常降級"]
+  PRE["[modPresent模組]<br/>浮動結果視窗＋TTS 朗讀"]
+  CAP ==>|"ICaptureResult(in-process)"| QRY
+  QRY ==>|"datIntf自訂查詢結果格式(in-process)"| PRE
+end
+
+OPENAI["[OpenAI平台]"]
+SPEECH["[Windows內建語音]"]
+
+PRSN ==>|"comIntf自訂本機桌面操作"| CAP
+PRSN ==>|"comIntf自訂本機桌面操作"| PRE
+QRY ==>|"comIntf通用HTTPS連線<br/>(附掛 apiIntf標準OPENAI的API協定)"| OPENAI
+PRE ==>|"techItem語音合成"| SPEECH
+```
+
+> 圖例：`==>` 通訊／呼叫（線上標契約名；模組間為 in-process C# interface，機器可驗全文歸 code）。
+
+組態架構圖：
+
+```mermaid
+flowchart BT
+
+ADM["team工具維保"]
+
+subgraph SYS["[sysScreenTrans系統]<br/>組態：etyCfg自訂sysScreenTrans組態<br/>techStack：techStackDotnetWin(候選)"]
+  CAP["[modCapture模組]"]
+  QRY["[modQuery模組]"]
+  PRE["[modPresent模組]"]
+end
+
+ENVV["[使用者環境變數]"]
+APPS["[appsettings.json]"]
+
+ENVV -->|"paramOpenaiApiKey=`OPENAI_API_KEY`"| QRY
+APPS -->|"paramModel／paramQueryTimeoutSec"| QRY
+APPS -->|"paramTtsVoice"| PRE
+ADM -.->|"setWi自訂Usr安裝設定金鑰"| ENVV
+ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
+```
+
+> 圖例：`-->` 參數相依（標 param）、`-.->` 配置作業（標 setWi）、techStack 選型（文字標記）。
+
+* **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
+  * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
+  * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
+  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；程式檔／設定檔／日誌掃描無金鑰。
+  * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost、出現於選區旁不遮擋原選區；TTS 非同步播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
+  * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
+* **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
+* **對外介面**：[modQuery模組]→OpenAI＝[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]；[modPresent模組]→Windows 語音＝[techItem語音合成]。
+
+### (B) 人員編組
+
+> 逐 team 列出一線人員（prsn）。單人方案：prsn玩家＝[Org使用者] 本人；**組長督核不適用**（無多人分權，偏離 FORMAT §5 `.2 組長督核` 慣例、已於文件頭宣告）。
+
+| team | prsn（執行） | 備註 |
+| --- | --- | --- |
+| team遊戲查詢（#1） | prsn玩家 | 遊戲中即查即走 |
+| team工具維保（#2） | prsn玩家 | 維保時段自行操作 |
+
+### (C) 動作項目
+
+> 每條 ＜II＞ teamSop#N.M 由 prsnSop#N.M.1 承接（單人方案無 `.2` 督核）；surface 見 ＜C.(C)＞。
+
+| team | teamSop | prsnSop（執行） |
+| --- | --- | --- |
+| **team遊戲查詢（#1）**<br>prsn玩家 | teamSop#1.1 | prsnSop#1.1.1〔prsn玩家·選區遮罩頁〕熱鍵喚起並框選〔[runWi自訂Usr熱鍵喚起框選]〕 |
+| | teamSop#1.2 | prsnSop#1.2.1〔prsn玩家·查詢結果頁〕確認查詢進行與結果送達〔[runWi自訂Sys辨識翻譯選區]〕 |
+| | teamSop#1.3 | prsnSop#1.3.1〔prsn玩家·查詢結果頁〕查看聆聽並關閉〔[runWi自訂Usr查看聆聽結果]〕 |
+| **team工具維保（#2）**<br>prsn玩家 | teamSop#2.1 | prsnSop#2.1.1〔prsn玩家·OS 標準設定〕放置程式並設定金鑰〔[setWi自訂Usr安裝設定金鑰]〕 |
+| | teamSop#2.2 | prsnSop#2.2.1〔prsn玩家·系統匣選單頁〕啟動結束常駐〔[setWi自訂Usr啟動結束常駐]〕 |
+| | teamSop#2.3 | prsnSop#2.3.1〔prsn玩家·OS 標準設定〕移除程式與金鑰〔[setWi自訂Usr移除工具]〕 |
+
+### (D) 軟硬項目
+
+> 本層部署所需之具體元件。
+
+* **Windows 原生 API**：`RegisterHotKey`（全域熱鍵）、GDI＋螢幕擷取（實際像素）、系統匣（NotifyIcon）、Per-Monitor DPI awareness。
+* **Windows 內建語音**：`System.Speech.Synthesis`（SAPI，離線）。
+* **外部端點**：OpenAI vision API（HTTPS）。
+
+## C. 組態設定
+
+> 本節四分：(A) 技術選型／(B) 關鍵參數／(C) 人機介面／(D) 部署做法。
+
+### (A) 技術選型
+
+> 各 module 之 techItem 具體選型／版本（承 ＜II.C.(A)＞ techStack、落地 ＜I.C.(A)＞ techApp 強制項）。
+
+* [modCapture模組]：.NET 8 WPF＋Win32 P/Invoke（`RegisterHotKey`／`GetDpiForMonitor`）＋`System.Drawing.Graphics.CopyFromScreen`（截圖）＋`Hardcodet.NotifyIcon.Wpf`（或 WinForms `NotifyIcon`，系統匣）。
+* [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`。
+* [modPresent模組]：WPF 視窗＋**語音合成**＝`System.Speech.Synthesis`（[techItem語音合成]，離線 SAPI；語音缺失時明確提示降級）。
+
+### (B) 關鍵參數
+
+> 列本層關鍵參數／組態；列舉即可、不解釋。
+
+* **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密）。
+* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramTtsVoice=`（空＝系統預設英文語音）。
+* **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
+
+### (C) 人機介面
+
+> 本層從 prsn 歸納出**具名頁面**（桌面 surface）：每頁以「領域+功能+頁」命名、標明管線階段；版型循 [techApp桌面查詢工具] §B 不干擾介面 bar 與 Windows 11 Fluent Design。
+
+**業界常規（page，公開標準）**：遮罩選取循 Snipping Tool／PowerToys 慣例（變暗底＋橡皮筋＋十字游標）；浮動卡片循 Fluent acrylic 卡片（圓角、細邊框、暗色）；系統匣選單頁循 Windows tray 慣例；鍵盤可近用性（`ESC` 一致取消）掛 WCAG 精神。
+
+**本系統頁面清單**（MVP）：
+
+| 頁面 | 導覽（teamSop） | 管線階段 | 版型＋主要元素 | prsnSop | surface |
+| --- | --- | --- | --- | --- | --- |
+| 選區遮罩頁 | 遊戲查詢／teamSop#1.1 | capture | 全螢幕 45% 變暗遮罩＋十字游標＋accent 橡皮筋選框（差顯反白）＋頂部一行提示（`拖曳框選要查詢的文字，ESC 取消`） | #1.1.1 | 桌面 overlay（topmost） |
+| 查詢結果頁 | 遊戲查詢／teamSop#1.2·1.3 | query＋present | 暗色圓角卡片（約 420px 寬）：查詢中＝spinner＋`辨識翻譯中…`；完成＝三區直排（原文／KK 音標／中譯）＋播放鈕＋關閉鈕；失敗＝錯誤訊息＋下一步指引 | #1.2.1·#1.3.1 | 桌面浮動視窗（選區旁、topmost） |
+| 系統匣選單頁 | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單：狀態列（金鑰備妥／缺失）、關於、結束 | #2.2.1 | 系統匣 |
+
+> **設計原則**：每頁只服務一個專業目的（遮罩＝選取、卡片＝呈現朗讀、tray＝維運）；安裝金鑰與移除（#2.1.1／#2.3.1）走 OS 標準設定（檔案總管＋環境變數），非本系統頁面。`prsnSop→頁` 以 ＜B.(C)＞ 為準、本節為反查。
+
+頁面設計示意圖（每具名頁一張；設計期參考稿、以文字為準）：
+
+![頁面設計示意圖：選區遮罩頁](design-visual/page-選區遮罩頁.png)
+
+![頁面設計示意圖：查詢結果頁](design-visual/page-查詢結果頁.png)
+
+![頁面設計示意圖：系統匣選單頁](design-visual/page-系統匣選單頁.png)
+
+### (D) 部署做法
+
+> 建置／測試／部署指令（繼承 techStack；GATE 由此取建置/測試指令）。
+
+* [sysScreenTrans系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true`、**測試指令** `dotnet test`、**部署方法** 單一 exe 手動放置（免安裝）。
+* **方案層**：於 Windows 11 實機以發佈 exe 跑 intTest／e2eTest。
+
+## D. 規格效益
+
+> 模組層工程驗證（規格要求＝品管測試）；效益回扣需求層。intTest 以遞增基底層層堆疊。
+
+### (A) 規格要求
+
+> 模組層品管測試：遞增整合（intTest）。另模組層單元測試（query 解析、選區座標換算等，涵蓋度目標 ≥80%）與介面測試（datIntf 契約一致）全文歸 code。
+
+**遞增整合測試（intTest）**：
+
+| # | 驗證 WI | 基底 | 步驟 → 預期 |
+| --- | --- | --- | --- |
+| 01 | setWi自訂Usr安裝設定金鑰 | 無 | 發佈 exe、設 `OPENAI_API_KEY` → 檔案就位、環境變數存在非空 |
+| 02 | setWi自訂Usr啟動結束常駐 | 01 | 啟動 exe → 系統匣圖示出現、無主視窗；結束 → 程序退出、熱鍵釋放；重複啟動 → 單一實例提示 |
+| 03 | runWi自訂Usr熱鍵喚起框選（喚起） | 02 | 按 `Alt+L`（左右各測） → 遮罩 <300ms 出現；按 `ESC` → 遮罩消失、無殘影 |
+| 04 | runWi自訂Usr熱鍵喚起框選（框選） | 03 | 拖曳框選 → 取得選區影像；多螢幕／125%／150% DPI 下與框選範圍 0px 偏移 |
+| 05 | runWi自訂Sys辨識翻譯選區（成功） | 04 | 以含英文之測試影像查詢 → 回應解析為三欄齊備之 [datIntf自訂查詢結果格式] |
+| 06 | runWi自訂Sys辨識翻譯選區（降級） | 02 | 未設金鑰／斷網／逾時 → 明確錯誤訊息與指引、程式續存活 |
+| 07 | runWi自訂Usr查看聆聽結果（顯示） | 05 | 結果視窗於選區旁顯示三區內容 → 與查詢結果一致、不遮擋原選區 |
+| 08 | runWi自訂Usr查看聆聽結果（朗讀） | 07 | 點播放 → TTS 播放呼叫發生（測試攔截驗證）；重複點 → 先停再播；`ESC` → 視窗關閉 |
+| 09 | setWi自訂Usr移除工具 | 02 | 刪除 exe＋環境變數 → 無殘留檔案、程序、開機項 |
+
+### (B) 效益指標
+
+> 模組層效益回扣需求層；指標正本見 ＜I.D.(B) 效益指標＞（每 spec 一項），本層不重列、僅標承接。
+
+* 本層之 intTest 全綠＋上述 invariant 成立（選區 0px 偏移、零輸入干擾、金鑰不落地、UI 不阻塞、單一實例），為「模組設計可被工程驗證、對外保證成立」之效益門檻；對 spec#1–5 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
