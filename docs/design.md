@@ -160,7 +160,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 * **spec#1-可背景常駐與熱鍵喚起**：程式以系統匣常駐背景，遊戲中按 `Alt+L`（左右 Alt 皆可）即喚起查詢流程，不中斷遊戲操作；再次可用 `ESC` 隨時取消。
 * **spec#2-可框選畫面查詢區塊**：喚起後全螢幕變暗，滑鼠拖曳框選欲查詢之畫面區塊，放開即完成選取；多螢幕與 DPI 縮放環境下選區對位正確。
 * **spec#3-可辨識並翻譯選區英文**：對選區影像內之英文進行辨識，回傳英文原文、KK 音標、繁體中文翻譯三項內容。
-* **spec#4-可查看並聆聽查詢結果**：查詢結果以浮動視窗顯示（原文／音標／中譯），提供播放按鈕朗讀英文原文（Windows 內建語音），`ESC` 關閉視窗。
+* **spec#4-可查看並聆聽查詢結果**：查詢結果以浮動視窗顯示（原文／音標／中譯），提供播放按鈕朗讀英文原文與中文翻譯（預設 OpenAI 語音音檔、Windows 內建語音為離線後備），`ESC` 關閉視窗。
 * **spec#5-查詢使用自備額度且金鑰不落地**：辨識翻譯使用 [USR] 自備之 OpenAI API 額度（讀 `OPENAI_API_KEY` 環境變數），程式與 repo 不儲存任何金鑰。
 
 **端對端驗收課目（e2eTest，依 productReadme，每 orgSop 至少一案，回扣 orgSop／spec）**：
@@ -269,8 +269,8 @@ SYS -.->|"常駐於"| ENV
 > 本層方案所依賴之平台與服務。
 
 * **執行平台**：Windows 11 桌面（多螢幕、DPI 縮放），免安裝單一 exe 常駐。
-* **外部服務**：OpenAI vision API（[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]，使用者自備金鑰）。
-* **OS 內建能力**：Windows 內建語音（[techItem語音合成]）、全域熱鍵、螢幕擷取、系統匣。
+* **外部服務**：OpenAI vision API 與 OpenAI 語音合成 API（[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]，使用者自備金鑰）。
+* **OS 內建能力**：Windows 內建語音（[techItem語音合成] 離線後備）、全域熱鍵、螢幕擷取、系統匣。
 
 ## C. 組態設定
 
@@ -287,7 +287,7 @@ SYS -.->|"常駐於"| ENV
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
-* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramTtsVoice=系統預設`（appsettings）。
+* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramTtsProvider=openai`／`paramTtsModel=gpt-4o-mini-tts`／`paramTtsVoice=系統預設`（appsettings）。
 
 ### (C) 人機介面
 
@@ -409,7 +409,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
   * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
   * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；程式檔／設定檔／日誌掃描無金鑰。
-  * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost；首次置中、之後記住使用者擺放的位置與大小（跨啟動、存 `%APPDATA%\ScreenTrans\ui-state.json`）；可拖曳標題移動、右下握把縮放；TTS 非同步播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
+  * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost；首次置中、之後記住使用者擺放的位置與大小（跨啟動、存 `%APPDATA%\ScreenTrans\ui-state.json`）；可拖曳標題移動、右下握把縮放；TTS（預設 OpenAI 語音音檔、SAPI 離線後備）非同步播放、中英可各自播放與自動播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
 * **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
 * **對外介面**：[modQuery模組]→OpenAI＝[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]；[modPresent模組]→Windows 語音＝[techItem語音合成]。
@@ -441,7 +441,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 > 本層部署所需之具體元件。
 
 * **Windows 原生 API**：`RegisterHotKey`（全域熱鍵）、GDI＋螢幕擷取（實際像素）、系統匣（NotifyIcon）、Per-Monitor DPI awareness。
-* **Windows 內建語音**：`System.Speech.Synthesis`（SAPI，離線）。
+* **語音合成**：OpenAI 語音 API（`/v1/audio/speech`，預設）＋`System.Speech.Synthesis`（SAPI，離線後備）。
 * **外部端點**：OpenAI vision API（HTTPS）。
 
 ## C. 組態設定
@@ -454,14 +454,14 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 * [modCapture模組]：.NET 8 WPF＋Win32 P/Invoke（`RegisterHotKey`／`GetDpiForMonitor`）＋`System.Drawing.Graphics.CopyFromScreen`（截圖）＋`Hardcodet.NotifyIcon.Wpf`（或 WinForms `NotifyIcon`，系統匣）。
 * [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`。
-* [modPresent模組]：WPF 視窗＋**語音合成**＝`System.Speech.Synthesis`（[techItem語音合成]，離線 SAPI；語音缺失時明確提示降級）。
+* [modPresent模組]：WPF 視窗＋**語音合成**＝[techItem語音合成]：預設 OpenAI 語音（`POST /v1/audio/speech`，回 WAV 以 `System.Media.SoundPlayer` 佇列循序播放中英）；失敗（無金鑰／網路／格式）退回 `System.Speech.Synthesis`（離線 SAPI）。
 
 ### (B) 關鍵參數
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
 * **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密）。
-* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramTtsVoice=`（空＝系統預設英文語音）。
+* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramTtsProvider=openai`（或 `windows`）、`paramTtsModel=gpt-4o-mini-tts`、`paramTtsVoice=`（空＝OpenAI 用 `nova`／SAPI 用系統預設）。
 * **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
 
 ### (C) 人機介面

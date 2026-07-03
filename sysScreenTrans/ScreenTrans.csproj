@@ -12,6 +12,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- 進程級 DPI 由 app.manifest（PerMonitorV2）設定：WPF 進入點需 manifest、且 Win32 截圖需 physical pixels（spec#2）。WFO0003 是 WinForms 對其自有 SetHighDpiMode 的偏好，此處不適用，抑制之。 -->
     <NoWarn>WFO0003</NoWarn>
+    <ApplicationIcon>assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +29,11 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 系統匣／視窗圖示（打包為 WPF 資源，執行期以 pack URI 載入） -->
+    <Resource Include="assets\app.ico" />
   </ItemGroup>
 
 </Project>

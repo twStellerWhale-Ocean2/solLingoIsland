@@ -38,6 +38,7 @@ public partial class ResultWindow : Window
         ApplyBounds();
         HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
         ResizeGrip.DragDelta += OnResizeDelta;
+        CloseBtn.Click += (_, _) => Close();
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>

@@ -17,8 +17,8 @@ public partial class App : System.Windows.Application
 {
     private WinForms.NotifyIcon? _tray;
     private HotKeyService? _hotkey;
-    private SpeechService? _speech;
-    private AppConfig _config = new("gpt-4o-mini", 15, "");
+    private ISpeechService? _speech;
+    private AppConfig _config = new("gpt-4o-mini", 15, "", "openai", "gpt-4o-mini-tts");
     private bool _busy;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
@@ -31,12 +31,16 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException += OnUnhandled;
 
         _config = AppConfig.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
-        _speech = new SpeechService(_config.Voice);
-        var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+        var keyReady = !string.IsNullOrWhiteSpace(apiKey);
+        // TTS：預設走 OpenAI 音檔（自然，中英同端點），失敗退回 Windows SAPI；paramTtsProvider=windows 則直接用 SAPI
+        _speech = _config.TtsProvider.Equals("windows", StringComparison.OrdinalIgnoreCase)
+            ? new SpeechService(_config.Voice)
+            : new OpenAiSpeechService(apiKey, _config.TtsModel, _config.Voice, _config.TimeoutSec, fallback: new SpeechService(null));
 
         _tray = new WinForms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadAppIcon(WinForms.SystemInformation.SmallIconSize),
             Visible = true,
             Text = "ScreenTrans — 遊戲畫面英文查詢（Alt+L）",
         };
@@ -59,6 +63,22 @@ public partial class App : System.Windows.Application
                 "熱鍵 Alt+L 註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，但無法以熱鍵喚起。",
                 "ScreenTrans");
         }
+    }
+
+    /// <summary>從打包的 assets/app.ico 資源載入指定尺寸圖示；失敗退回系統預設。</summary>
+    private static Icon LoadAppIcon(System.Drawing.Size size)
+    {
+        try
+        {
+            var uri = new Uri("pack://application:,,,/assets/app.ico");
+            using var stream = System.Windows.Application.GetResourceStream(uri)?.Stream;
+            if (stream is not null)
+            {
+                return new Icon(stream, size);
+            }
+        }
+        catch { /* 資源缺失退回預設 */ }
+        return SystemIcons.Application;
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs args)
@@ -117,7 +137,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _hotkey?.Dispose();
-        _speech?.Dispose();
+        (_speech as IDisposable)?.Dispose();
         if (_tray is not null)
         {
             _tray.Visible = false;

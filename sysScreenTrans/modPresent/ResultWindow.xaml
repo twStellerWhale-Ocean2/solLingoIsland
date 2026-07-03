@@ -13,11 +13,9 @@
       </Grid.RowDefinitions>
 
       <!-- 標題列：拖曳可移動視窗（Background=Transparent 才可命中拖曳） -->
-      <Grid x:Name="HeaderBar" Grid.Row="0" Background="Transparent">
+      <Grid x:Name="HeaderBar" Grid.Row="0" Background="Transparent" ToolTip="拖曳可移動視窗">
         <TextBlock Text="查詢結果" Foreground="#B0688A" FontSize="16"
                    VerticalAlignment="Center" Margin="18,0"/>
-        <TextBlock Text="拖曳標題移動 · ESC 關閉" Foreground="#C79BAE" FontSize="12"
-                   HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0"/>
         <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
       </Grid>
 
@@ -39,6 +37,25 @@
           </ControlTemplate>
         </Thumb.Template>
       </Thumb>
+
+      <!-- 右上角關閉鈕：置於 HeaderBar 之上、獨立命中，點擊不觸發拖曳 -->
+      <Button x:Name="CloseBtn" Grid.Row="0"
+              HorizontalAlignment="Right" VerticalAlignment="Top"
+              Width="32" Height="32" Margin="0,6,8,0" Cursor="Hand" ToolTip="關閉（ESC）">
+        <Button.Template>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="Transparent">
+              <TextBlock Text="✕" FontSize="16" Foreground="#B0688A"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#F4C2D0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Button.Template>
+      </Button>
     </Grid>
   </Border>
 </Window>
