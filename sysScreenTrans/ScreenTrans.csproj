@@ -15,6 +15,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- QueryService.Parse 等 internal 邏輯供單元測試 -->
+    <InternalsVisibleTo Include="ScreenTrans.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TTS：Windows 內建語音合成（SAPI）[techItem語音合成] -->
+    <PackageReference Include="System.Speech" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
