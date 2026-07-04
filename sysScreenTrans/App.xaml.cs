@@ -130,7 +130,7 @@ public partial class App : System.Windows.Application
 
             try
             {
-                var query = new QueryService(_config.Model, _config.TimeoutSec);
+                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
                 var result = await query.QueryAsync(mask.Result.PngBytes);
                 win.ShowResult(result, _speech!);
             }

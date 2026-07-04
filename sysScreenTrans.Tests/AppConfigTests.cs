@@ -12,16 +12,43 @@ public class AppConfigTests
     private static string TempPath() => Path.Combine(Path.GetTempPath(), $"screentrans-cfg-{Guid.NewGuid():N}.json");
 
     [Fact]
-    public void SaveLoad_Roundtrips_ThreeFields()
+    public void SaveLoad_Roundtrips_AllFields()
     {
         var path = TempPath();
         try
         {
-            new AppConfig("gpt-4o", 30, "Microsoft Zira Desktop").Save(path);
+            new AppConfig("gpt-4o", 30, "Microsoft Zira Desktop", 3).Save(path);
             var loaded = AppConfig.Load(path);
             Assert.Equal("gpt-4o", loaded.Model);
             Assert.Equal(30, loaded.TimeoutSec);
             Assert.Equal("Microsoft Zira Desktop", loaded.Voice);
+            Assert.Equal(3, loaded.MaxRetries);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_MissingMaxRetries_DefaultsToTwo()
+    {
+        // 舊 appsettings 無 paramQueryMaxRetries → 用預設 2（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(2, cfg.MaxRetries);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Save_Writes_MaxRetriesKey()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2).Save(path);
+            Assert.Contains("paramQueryMaxRetries", File.ReadAllText(path));
         }
         finally { File.Delete(path); }
     }

@@ -4,26 +4,38 @@ using System.Text.Json;
 
 namespace ScreenTrans.Query;
 
-/// <summary>查詢失敗之明確可讀降級（[runWi自訂Sys辨識翻譯選區] 異常降級）。</summary>
+/// <summary>查詢失敗之明確可讀降級（[runWi自訂Sys辨識翻譯選區] 異常降級）。永久性錯誤，不重試。</summary>
 public sealed class QueryException : Exception
 {
     public QueryException(string message) : base(message) { }
 }
 
 /// <summary>
+/// 暫時性查詢錯誤（連線中斷、逾時、HTTP 429／5xx）——可重試，供 <see cref="QueryService"/> 內部
+/// 退避重試迴圈辨識；耗盡重試次數後轉為使用者可見之 <see cref="QueryException"/>。
+/// </summary>
+internal sealed class TransientQueryException : Exception
+{
+    public TransientQueryException(string message) : base(message) { }
+}
+
+/// <summary>
 /// 單次 vision 查詢（[modQuery模組] 查詢契約，spec#3／#5）：讀 OPENAI_API_KEY（僅環境變數、
-/// 不落地）、附結構化輸出要求呼叫 OpenAI，解析為 [datIntf自訂查詢結果格式]；各類失敗走 QueryException。
+/// 不落地）、附結構化輸出要求呼叫 OpenAI，解析為 [datIntf自訂查詢結果格式]。暫時性錯誤（逾時、
+/// 連線中斷、429、5xx）以有限次數指數退避重試；永久性錯誤（401／400／其他 4xx／解析失敗）立即降級。
 /// </summary>
 public sealed class QueryService
 {
     private readonly string _model;
     private readonly int _timeoutSec;
+    private readonly int _maxRetries;
     private static readonly HttpClient Http = new();
 
-    public QueryService(string model, int timeoutSec)
+    public QueryService(string model, int timeoutSec, int maxRetries = 2)
     {
         _model = model;
         _timeoutSec = timeoutSec;
+        _maxRetries = Math.Max(0, maxRetries); // 負值視為不重試
     }
 
     public async Task<QueryResult> QueryAsync(byte[] pngBytes, CancellationToken ct = default)
@@ -35,6 +47,47 @@ public sealed class QueryService
         }
 
         var dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
+        var json = await RunWithRetryAsync(c => SendOnceAsync(dataUrl, key, c), ct);
+        return Parse(json); // 解析失敗屬永久性、在重試迴圈之外，不重試
+    }
+
+    /// <summary>對 <paramref name="attempt"/> 執行有限次數指數退避重試：暫時性錯誤重試、永久性錯誤直接上拋。</summary>
+    /// <remarks>internal 供單元測試注入假 attempt 與 backoff（免打真網路、免真等待）。</remarks>
+    internal async Task<string> RunWithRetryAsync(
+        Func<CancellationToken, Task<string>> attempt,
+        CancellationToken ct,
+        Func<int, CancellationToken, Task>? backoff = null)
+    {
+        backoff ??= DefaultBackoffAsync;
+        for (var i = 0; ; i++)
+        {
+            try
+            {
+                return await attempt(ct);
+            }
+            catch (TransientQueryException ex)
+            {
+                if (i >= _maxRetries)
+                {
+                    throw new QueryException(
+                        _maxRetries == 0
+                            ? $"查詢失敗：{ex.Message}"
+                            : $"查詢暫時性失敗，已重試 {_maxRetries} 次仍未成功：{ex.Message}");
+                }
+                await backoff(i, ct); // 第 i 次失敗後退避 2^i 秒（1s、2s…）
+            }
+        }
+    }
+
+    private static Task DefaultBackoffAsync(int attemptIndex, CancellationToken ct)
+        => Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attemptIndex)), ct);
+
+    /// <summary>429 或 5xx 視為暫時性（可重試）；其餘 4xx 為永久性。</summary>
+    internal static bool IsTransientStatus(int status) => status == 429 || status >= 500;
+
+    /// <summary>送出單次請求：2xx 回傳原始回應字串；暫時性失敗擲 <see cref="TransientQueryException"/>、永久性擲 <see cref="QueryException"/>。</summary>
+    private async Task<string> SendOnceAsync(string dataUrl, string key, CancellationToken ct)
+    {
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         req.Headers.Add("Authorization", "Bearer " + key);
         req.Content = JsonContent.Create(BuildPayload(dataUrl));
@@ -47,22 +100,31 @@ public sealed class QueryService
         {
             resp = await Http.SendAsync(req, cts.Token);
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            throw new QueryException($"查詢逾時（{_timeoutSec} 秒）。請確認網路後重試。");
+            throw; // 使用者主動取消，非暫時性錯誤、不重試
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TransientQueryException($"查詢逾時（{_timeoutSec} 秒）");
         }
         catch (HttpRequestException ex)
         {
-            throw new QueryException("網路連線失敗：" + ex.Message);
+            throw new TransientQueryException("網路連線中斷：" + ex.Message);
         }
 
-        var json = await resp.Content.ReadAsStringAsync(cts.Token);
+        var json = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)
         {
-            throw new QueryException($"API 回應 {(int)resp.StatusCode}：{Truncate(json, 200)}");
+            var code = (int)resp.StatusCode;
+            if (IsTransientStatus(code))
+            {
+                throw new TransientQueryException($"API 暫時性錯誤 {code}：{Truncate(json, 120)}");
+            }
+            throw new QueryException($"API 回應 {code}：{Truncate(json, 200)}");
         }
 
-        return Parse(json);
+        return json;
     }
 
     private object BuildPayload(string dataUrl) => new
