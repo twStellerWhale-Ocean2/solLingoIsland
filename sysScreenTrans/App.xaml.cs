@@ -199,6 +199,9 @@ public partial class App : System.Windows.Application
         }
         _config = dlg.ResultConfig;
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+        // 結果視窗現在會跨焦點存活：關閉前一結果視窗，免得它續用即將被 dispose 的舊語音服務
+        // （存完設定後於該視窗點播放/單字會呼叫已釋放的合成器）。
+        _result?.Close();
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
         RegisterHotkeyOrWarn(); // 快捷鍵可能已變更，重新註冊
