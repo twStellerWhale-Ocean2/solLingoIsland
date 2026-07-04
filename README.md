@@ -49,7 +49,7 @@
 | 參數 | 預設 | 說明 |
 | --- | --- | --- |
 | `paramModel` | `gpt-4o-mini` | 查詢使用的 OpenAI 模型 |
-| `paramQueryTimeoutSec` | `15` | 單次查詢逾時秒數 |
+| `paramQueryTimeoutSec` | `15` | 單次查詢逾時秒數；填 `0` 或負值時自動套用安全下限 `15` 秒 |
 | `paramQueryMaxRetries` | `2` | 查詢遇暫時性錯誤（逾時、連線中斷、429、5xx）時的最大重試次數（指數退避；`0`＝不重試）；金鑰無效等永久性錯誤不重試 |
 | `paramTtsVoice` | （空＝系統預設英文語音） | 朗讀語音名稱；亦可由系統匣「設定」選單挑選已安裝的 Windows 語音 |
 
