@@ -23,6 +23,7 @@ public partial class App : System.Windows.Application
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
+    private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個（失焦不再自動關閉）
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -62,16 +63,13 @@ public partial class App : System.Windows.Application
         _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("開啟主控頁", null, (_, _) => _dock?.RestoreFromTray());
+        menu.Items.Add("開啟主控頁", null, (_, _) => OpenDock());
         menu.Items.Add("設定…", null, OnSettings);
-        menu.Items.Add("關於 ScreenTrans", null, (_, _) =>
-            System.Windows.MessageBox.Show(
-                $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
-                "關於 ScreenTrans"));
+        menu.Items.Add("關於 ScreenTrans", null, (_, _) => ShowAbout());
         menu.Items.Add("結束", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
         // 雙擊系統匣圖示＝開啟主控頁
-        _tray.DoubleClick += (_, _) => _dock?.RestoreFromTray();
+        _tray.DoubleClick += (_, _) => OpenDock();
 
         // 常駐主控頁（工作列按鈕型可見入口，spec#1）：啟動即建立、預設最小化不擋遊戲；
         // 關閉視窗＝收合非結束（DockWindow 攔截），與系統匣共用同一組維運動作。
@@ -79,6 +77,9 @@ public partial class App : System.Windows.Application
         _dock.RefreshStatus(keyReady, HotkeyDisplay());
         _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
         _dock.ExitRequested += ExitApp;
+        // 主控頁被帶到前景時（工作列按鈕／Alt+Tab／系統匣還原皆會 Activate）關閉 topmost 結果視窗，
+        // 否則結果卡片會蓋住非 topmost 的主控頁，違反 spec#1「工作列可穩定尋得主控入口」。
+        _dock.Activated += (_, _) => CloseResultBeforeMaintenanceUi();
         _dock.WindowState = WindowState.Minimized;
         _dock.Show();
 
@@ -149,6 +150,10 @@ public partial class App : System.Windows.Application
         _busy = true;
         try
         {
+            // 結果視窗失焦不再自動關閉：新查詢一開始即關閉前一結果視窗——須在遮罩截圖「之前」，
+            // 否則前一結果視窗仍為 topmost，選區若與其重疊會把舊卡片截進畫面（同時亦維持至多一個）。
+            _result?.Close();
+
             var mask = new MaskWindow();
             mask.ShowDialog();
             if (mask.Result is null)
@@ -157,6 +162,8 @@ public partial class App : System.Windows.Application
             }
 
             var win = new ResultWindow();
+            _result = win;
+            win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
             win.ShowLoading();
             win.Show();
             win.Activate();
@@ -165,10 +172,18 @@ public partial class App : System.Windows.Application
             {
                 var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
                 var result = await query.QueryAsync(mask.Result.PngBytes);
+                if (!ReferenceEquals(_result, win))
+                {
+                    return; // 載入中該視窗已被維運 UI 關閉或被新查詢取代：捨棄遲來結果，免對已關視窗填內容/幽靈朗讀
+                }
                 win.ShowResult(result, _speech!);
             }
             catch (QueryException ex)
             {
+                if (!ReferenceEquals(_result, win))
+                {
+                    return; // 同上：視窗已不在，錯誤亦不再顯示於該視窗
+                }
                 win.ShowError(ex.Message);
             }
         }
@@ -182,9 +197,37 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// 開啟任一維運 UI（主控頁／設定／關於）前先關閉前一結果視窗。
+    /// 結果視窗 <c>Topmost</c>，且移除失焦自動關閉後不再於維運視窗開啟時自動消失；
+    /// 這些維運視窗無 owner／非 topmost，若不先關結果卡片會被蓋在其下而看不到、用不到
+    /// （並還原本 issue 前「開維運 UI 即關結果」之時序）。設定路徑另需在 dispose 舊語音服務前關閉。
+    /// </summary>
+    private void CloseResultBeforeMaintenanceUi() => _result?.Close();
+
+    /// <summary>系統匣「開啟主控頁」／雙擊圖示：先關結果視窗（免遮蔽）再還原主控頁。</summary>
+    private void OpenDock()
+    {
+        CloseResultBeforeMaintenanceUi();
+        _dock?.RestoreFromTray();
+    }
+
+    /// <summary>系統匣「關於」：先關結果視窗（免遮蔽）再顯示說明。</summary>
+    private void ShowAbout()
+    {
+        CloseResultBeforeMaintenanceUi();
+        System.Windows.MessageBox.Show(
+            $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
+            "關於 ScreenTrans");
+    }
+
     /// <summary>系統匣「設定…」：開設定視窗，儲存後套用（重建語音服務、更新金鑰狀態列）。</summary>
     private void OnSettings(object? sender, EventArgs e)
     {
+        // 開設定「之前」先關前一結果視窗：免其 topmost 卡片蓋住設定視窗，
+        // 亦免存檔後 dispose 舊語音服務時該視窗續持已釋放服務（點播放/單字呼叫已釋放合成器）。
+        CloseResultBeforeMaintenanceUi();
+
         var dlg = new SettingsWindow(_config);
         if (dlg.ShowDialog() != true)
         {
