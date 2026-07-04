@@ -16,6 +16,8 @@ using Orientation = System.Windows.Controls.Orientation;
 using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using DragDeltaEventArgs = System.Windows.Controls.Primitives.DragDeltaEventArgs;
 using CancelEventArgs = System.ComponentModel.CancelEventArgs;
+using Hyperlink = System.Windows.Documents.Hyperlink;
+using Run = System.Windows.Documents.Run;
 
 namespace ScreenTrans.Present;
 
@@ -143,12 +145,12 @@ public partial class ResultWindow : Window
             return;
         }
 
-        // 英文組：原文 ＋ KK 音標 ＋ 英文播放/自動
+        // 英文組：原文（逐字可點單獨發音）＋ KK 音標 ＋ 整句播放/自動
         BodyPanel.Children.Add(Label("原文 ORIGINAL"));
-        BodyPanel.Children.Add(Value(r.Original, "#3A2C33", 28, bold: true));
+        BodyPanel.Children.Add(WordifiedOriginal(r.Original));
         BodyPanel.Children.Add(Label("KK 音標 PHONETIC"));
         BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia"));
-        BodyPanel.Children.Add(PlayRow("▶ 英文發音",
+        BodyPanel.Children.Add(PlayRow("▶ 整句發音",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
 
@@ -235,6 +237,41 @@ public partial class ResultWindow : Window
         Margin = new Thickness(0, 8, 0, 2),
     };
 
+    /// <summary>
+    /// 英文原文以逐字可點呈現（Issue #11）：每個單字為一個 <see cref="Hyperlink"/>，
+    /// 點選即以 en-US 單獨朗讀該字（重複觸發先停再播）；標點與空白為不可點的純文字，
+    /// 整句朗讀與自動播放不受影響。切分規則見 <see cref="EnglishWordTokenizer"/>。
+    /// </summary>
+    private TextBlock WordifiedOriginal(string text)
+    {
+        var tb = new TextBlock
+        {
+            FontSize = 28,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush("#3A2C33"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        foreach (var tok in EnglishWordTokenizer.Tokenize(text))
+        {
+            if (!tok.IsWord)
+            {
+                tb.Inlines.Add(new Run(tok.Text)); // 空白/標點：原樣、不可點
+                continue;
+            }
+            string word = tok.Text;
+            var link = new Hyperlink(new Run(word))
+            {
+                Foreground = Brush("#3A2C33"), // 維持大字原色，不用預設藍色連結色
+                TextDecorations = WordUnderline, // 淡粉點狀底線＝可點提示（游標另呈手形）
+                Cursor = Cursors.Hand,
+                ToolTip = $"朗讀「{word}」",
+            };
+            link.Click += (_, _) => _speech?.Speak(word, "en-US", stopPrevious: true);
+            tb.Inlines.Add(link);
+        }
+        return tb;
+    }
+
     private static TextBlock Value(string t, string color, double size, bool bold, string? font = null)
     {
         var tb = new TextBlock
@@ -257,6 +294,26 @@ public partial class ResultWindow : Window
 
     private static SolidColorBrush Brush(string hex) =>
         new((Color)ColorConverter.ConvertFromString(hex));
+
+    /// <summary>逐字單字的淡粉點狀底線（可點提示）；凍結以供所有單字共用、不重複建立。</summary>
+    private static readonly System.Windows.TextDecorationCollection WordUnderline = BuildWordUnderline();
+
+    private static System.Windows.TextDecorationCollection BuildWordUnderline()
+    {
+        var pen = new System.Windows.Media.Pen(Brush("#C77D9A"), 1.6)
+        {
+            DashStyle = System.Windows.Media.DashStyles.Dash,
+        };
+        var deco = new System.Windows.TextDecoration
+        {
+            Location = System.Windows.TextDecorationLocation.Underline,
+            Pen = pen,
+            PenThicknessUnit = System.Windows.TextDecorationUnit.Pixel,
+        };
+        var col = new System.Windows.TextDecorationCollection { deco };
+        col.Freeze();
+        return col;
+    }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
