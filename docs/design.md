@@ -408,7 +408,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 * **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
   * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
-  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**暫時性錯誤重試（retry/backoff）**：對**暫時性**失敗（連線中斷、逾時、HTTP 429、HTTP 5xx）以有限次數指數退避自動重試（`paramQueryMaxRetries` 次、預設 2，退避約 1s／2s）；**永久性**失敗（401 金鑰無效、400／其他 4xx 請求錯誤、回應格式解析失敗）**不重試**、立即走降級；使用者主動取消（`CancellationToken`）不視為暫時性錯誤。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；暫時性錯誤於次數上限內自動恢復、永久性錯誤不因重試拖長等待；程式檔／設定檔／日誌掃描無金鑰。
+  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**暫時性錯誤重試（retry/backoff）**：對**暫時性**失敗（連線中斷、逾時、HTTP 429、HTTP 5xx）以有限次數指數退避自動重試（`paramQueryMaxRetries` 次、預設 2，退避約 1s／2s）；**永久性**失敗（401 金鑰無效、400／其他 4xx 請求錯誤、回應格式解析失敗）**不重試**、立即走降級；使用者主動取消（`CancellationToken`）不視為暫時性錯誤。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；暫時性錯誤於次數上限內自動恢復、永久性錯誤不因重試拖長等待；查詢逾時秒數恆為正（不當組態於 [etyCfg自訂sysScreenTrans組態] 讀取邊界淨化，見 ＜C.(B)＞），逾時機制不因非正值即刻取消而失效；程式檔／設定檔／日誌掃描無金鑰。
   * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost；首次置中、之後記住使用者擺放的位置與大小（跨啟動、存 `%APPDATA%\ScreenTrans\ui-state.json`）；可拖曳標題移動、右下握把縮放；TTS（Windows 內建語音 SAPI，語音可於設定選擇）非同步播放、中英可各自播放與自動播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
 * **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
@@ -461,7 +461,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
 * **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密；可經系統匣「設定…」寫入使用者環境變數，仍不落地於程式／設定檔）。
-* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramQueryMaxRetries=2`（查詢暫時性錯誤最大重試次數；0＝不重試）、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）。
+* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`（查詢逾時秒數；**非正值（≤0）於組態讀取邊界套用安全下限 15**，令逾時機制不致因不當組態即刻取消而失效）、`paramQueryMaxRetries=2`（查詢暫時性錯誤最大重試次數；0＝不重試）、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）。
 * **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
 
 ### (C) 人機介面
