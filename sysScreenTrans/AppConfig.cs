@@ -4,7 +4,8 @@ using System.Text.Json;
 namespace ScreenTrans;
 
 /// <summary>appsettings.json 非機密偏好（[etyCfg自訂sysScreenTrans組態] D 類）。缺檔或欄位用預設。</summary>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice)
+/// <param name="MaxRetries">查詢暫時性錯誤最大重試次數（負值視為 0＝不重試）。</param>
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2)
 {
     public static AppConfig Load(string path)
     {
@@ -15,7 +16,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice)
             return new AppConfig(
                 r.TryGetProperty("paramModel", out var m) ? m.GetString() ?? "gpt-4o-mini" : "gpt-4o-mini",
                 r.TryGetProperty("paramQueryTimeoutSec", out var t) ? t.GetInt32() : 15,
-                r.TryGetProperty("paramTtsVoice", out var v) ? v.GetString() ?? "" : "");
+                r.TryGetProperty("paramTtsVoice", out var v) ? v.GetString() ?? "" : "",
+                r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2);
         }
         catch
         {
@@ -30,6 +32,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice)
         {
             paramModel = Model,
             paramQueryTimeoutSec = TimeoutSec,
+            paramQueryMaxRetries = MaxRetries,
             paramTtsVoice = Voice,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
