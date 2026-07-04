@@ -50,7 +50,7 @@
 | --- | --- | --- |
 | `paramModel` | `gpt-4o-mini` | 查詢使用的 OpenAI 模型 |
 | `paramQueryTimeoutSec` | `15` | 單次查詢逾時秒數 |
-| `paramTtsVoice` | （空＝系統預設） | 朗讀語音名稱 |
+| `paramTtsVoice` | （空＝系統預設英文語音） | 朗讀語音名稱；亦可由系統匣「設定」選單挑選已安裝的 Windows 語音 |
 
 ## 成功判定
 
