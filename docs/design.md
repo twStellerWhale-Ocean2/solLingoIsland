@@ -1,6 +1,6 @@
 ---
 name: solScreenEnglishTrans1
-date: 2026/7/3
+date: 2026/7/4
 formatVersion: "3.2"
 description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 系統匣常駐、Alt+L 熱鍵喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀。
 ---
@@ -287,7 +287,7 @@ SYS -.->|"常駐於"| ENV
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
-* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramTtsVoice=系統預設英文語音`（appsettings；語音朗讀改用 Windows 內建語音、不再有 TTS 供應商參數）。
+* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramQueryMaxRetries=2`／`paramTtsVoice=系統預設英文語音`（appsettings；`paramQueryMaxRetries` 為查詢暫時性錯誤之最大重試次數；語音朗讀改用 Windows 內建語音、不再有 TTS 供應商參數）。
 
 ### (C) 人機介面
 
@@ -397,7 +397,7 @@ ENVV["[使用者環境變數]"]
 APPS["[appsettings.json]"]
 
 ENVV -->|"paramOpenaiApiKey=`OPENAI_API_KEY`"| QRY
-APPS -->|"paramModel／paramQueryTimeoutSec"| QRY
+APPS -->|"paramModel／paramQueryTimeoutSec／paramQueryMaxRetries"| QRY
 APPS -->|"paramTtsVoice"| PRE
 ADM -.->|"setWi自訂Usr安裝設定金鑰"| ENVV
 ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
@@ -408,7 +408,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 * **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
   * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
-  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；程式檔／設定檔／日誌掃描無金鑰。
+  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**暫時性錯誤重試（retry/backoff）**：對**暫時性**失敗（連線中斷、逾時、HTTP 429、HTTP 5xx）以有限次數指數退避自動重試（`paramQueryMaxRetries` 次、預設 2，退避約 1s／2s）；**永久性**失敗（401 金鑰無效、400／其他 4xx 請求錯誤、回應格式解析失敗）**不重試**、立即走降級；使用者主動取消（`CancellationToken`）不視為暫時性錯誤。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；暫時性錯誤於次數上限內自動恢復、永久性錯誤不因重試拖長等待；程式檔／設定檔／日誌掃描無金鑰。
   * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost；首次置中、之後記住使用者擺放的位置與大小（跨啟動、存 `%APPDATA%\ScreenTrans\ui-state.json`）；可拖曳標題移動、右下握把縮放；TTS（Windows 內建語音 SAPI，語音可於設定選擇）非同步播放、中英可各自播放與自動播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
 * **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
@@ -453,7 +453,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 > 各 module 之 techItem 具體選型／版本（承 ＜II.C.(A)＞ techStack、落地 ＜I.C.(A)＞ techApp 強制項）。
 
 * [modCapture模組]：.NET 8 WPF＋Win32 P/Invoke（`RegisterHotKey`／`GetDpiForMonitor`）＋`System.Drawing.Graphics.CopyFromScreen`（截圖）＋`Hardcodet.NotifyIcon.Wpf`（或 WinForms `NotifyIcon`，系統匣）。
-* [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`。
+* [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`；暫時性錯誤以自寫指數退避重試迴圈（不引入第三方套件），送出單次請求與退避延遲皆接縫化以供單元測試注入。
 * [modPresent模組]：WPF 視窗＋**語音合成**＝[techItem語音合成]：`System.Speech.Synthesis`（SAPI，離線、免金鑰、零外部依賴）朗讀，中英佇列循序播放；語音以 `SpeechSynthesizer.GetInstalledVoices()` 列舉、由設定選定並存 `paramTtsVoice`（`SelectVoice`）；語音缺失時明確提示、不當機。
 
 ### (B) 關鍵參數
@@ -461,7 +461,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
 * **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密；可經系統匣「設定…」寫入使用者環境變數，仍不落地於程式／設定檔）。
-* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）。
+* **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramQueryMaxRetries=2`（查詢暫時性錯誤最大重試次數；0＝不重試）、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）。
 * **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
 
 ### (C) 人機介面
@@ -512,7 +512,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | 03 | runWi自訂Usr熱鍵喚起框選（喚起） | 02 | 按 `Alt+L`（左右各測） → 遮罩 <300ms 出現；按 `ESC` → 遮罩消失、無殘影 |
 | 04 | runWi自訂Usr熱鍵喚起框選（框選） | 03 | 拖曳框選 → 取得選區影像；多螢幕／125%／150% DPI 下與框選範圍 0px 偏移 |
 | 05 | runWi自訂Sys辨識翻譯選區（成功） | 04 | 以含英文之測試影像查詢 → 回應解析為三欄齊備之 [datIntf自訂查詢結果格式] |
-| 06 | runWi自訂Sys辨識翻譯選區（降級） | 02 | 未設金鑰／斷網／逾時 → 明確錯誤訊息與指引、程式續存活 |
+| 06 | runWi自訂Sys辨識翻譯選區（降級／重試） | 02 | 未設金鑰／400／401 → 立即明確錯誤、不重試；斷網／逾時／429／5xx → 有限次指數退避重試後成功則正常顯示、耗盡仍失敗則明確錯誤；全程程式續存活（暫時性重試後成功、永久性不重試之分類另有模組層單元測試涵蓋） |
 | 07 | runWi自訂Usr查看聆聽結果（顯示） | 05 | 結果視窗顯示三區內容 → 與查詢結果一致；可拖曳移動與縮放、關閉後再開還原上次位置大小 |
 | 08 | runWi自訂Usr查看聆聽結果（朗讀） | 07 | 點播放 → Windows 語音播放呼叫發生（測試攔截驗證，無網路／無金鑰亦可）；於設定選擇語音 → 後續播放採該語音（缺語音時提示不當機）；重複點 → 先停再播；`ESC` → 視窗關閉 |
 | 09 | setWi自訂Usr移除工具 | 02 | 刪除 exe＋環境變數 → 無殘留檔案、程序、開機項 |
