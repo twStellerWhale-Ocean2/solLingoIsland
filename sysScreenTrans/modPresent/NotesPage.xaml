@@ -1,0 +1,37 @@
+<UserControl x:Class="ScreenTrans.Present.NotesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="212"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+
+    <!-- 左：多層資料夾樹＋操作 -->
+    <Grid Grid.Column="0" Margin="10,8,4,10">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <Border Grid.Row="0" Style="{StaticResource Card}">
+        <TreeView x:Name="FolderTree" BorderThickness="0" Background="Transparent" AllowDrop="True" Margin="2"/>
+      </Border>
+      <WrapPanel Grid.Row="1" Margin="0,6,0,0">
+        <Button x:Name="AddBtn" Content="新增" Style="{StaticResource GhostButton}" Margin="0,0,4,4" Padding="8,3"/>
+        <Button x:Name="AddSubBtn" Content="子夾" Style="{StaticResource GhostButton}" Margin="0,0,4,4" Padding="8,3"/>
+        <Button x:Name="RenameBtn" Content="更名" Style="{StaticResource GhostButton}" Margin="0,0,4,4" Padding="8,3"/>
+        <Button x:Name="DeleteBtn" Content="刪除" Foreground="#B23B3B" Style="{StaticResource GhostButton}" Padding="8,3"/>
+      </WrapPanel>
+    </Grid>
+
+    <!-- 右：選取夾之條目 -->
+    <Grid Grid.Column="1" Margin="4,8,10,10">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
+        <StackPanel x:Name="EntryPanel"/>
+      </ScrollViewer>
+      <TextBlock x:Name="EmptyHint" Text="此資料夾尚無筆記。在結果或歷史按「加入我的筆記」即可收藏；資料夾可拖曳移動。"
+                 Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
+                 TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+    </Grid>
+  </Grid>
+</UserControl>

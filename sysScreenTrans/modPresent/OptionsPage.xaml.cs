@@ -1,61 +1,72 @@
-using System.Windows;
 using System.Windows.Input;
 using ScreenTrans.Capture;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
+using UserControl = System.Windows.Controls.UserControl;
 using ComboBox = System.Windows.Controls.ComboBox;
 using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
+using RoutedEventArgs = System.Windows.RoutedEventArgs;
 
 namespace ScreenTrans.Present;
 
 /// <summary>
-/// 系統匣「設定…」視窗：設定 API 金鑰（寫使用者環境變數、不落地）與朗讀語音（Windows 內建語音，
-/// 由 GetInstalledVoices 列舉）、查詢模型（寫 appsettings.json）。「測試發音」以當前設定即時試聽。
+/// 選項分頁（Issue #34；原 SettingsWindow 內容移入為 UserControl）：金鑰／朗讀語音／查詢模型／
+/// 喚起快捷鍵（監聽擷取）。儲存後 raise <see cref="SettingsChanged"/>；情境提示改由「情境」分頁管理，
+/// 本頁不呈現但 <see cref="Gather"/> 保留既有 Context 與 HistoryMax、不重置。
 /// </summary>
-public partial class SettingsWindow : Window
+public partial class OptionsPage : UserControl
 {
-    private const string DefaultVoiceTag = ""; // 空＝系統預設英文語音
+    private const string DefaultVoiceTag = "";
     private ISpeechService? _testSvc;
     private HotKeyBinding _hotkey = HotKeyBinding.Default;
     private bool _listening;
 
-    /// <summary>使用者按「儲存」後的新組態；呼叫端據此重建服務。</summary>
-    public AppConfig ResultConfig { get; private set; }
+    /// <summary>目前組態（供 Gather 保留未在本頁呈現之欄位）。</summary>
+    public AppConfig Config { get; private set; }
 
-    public SettingsWindow(AppConfig current)
+    /// <summary>按「儲存」後觸發，帶新組態；呼叫端據此重建服務、更新狀態、重註冊熱鍵。</summary>
+    public event Action<AppConfig>? SettingsChanged;
+
+    public OptionsPage(AppConfig current)
     {
         InitializeComponent();
-        ResultConfig = current;
-
-        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "目前狀態：○ 未設定" : "目前狀態：● 已設定";
+        Config = current;
 
         VoiceBox.Items.Add(new ComboBoxItem { Content = "（系統預設英文語音）", Tag = DefaultVoiceTag });
         foreach (var v in SpeechService.InstalledVoiceNames())
         {
             VoiceBox.Items.Add(new ComboBoxItem { Content = v, Tag = v });
         }
-        SelectByTag(VoiceBox, current.Voice ?? DefaultVoiceTag);
-        QueryModelBox.Text = current.Model;
-        ContextBox.Text = current.Context;
 
-        _hotkey = HotKeyBinding.Parse(current.Hotkey);
-        UpdateHotkeyStatus();
         ChangeHotkeyBtn.Click += (_, _) => StartListening();
         PreviewKeyDown += OnListenKeyDown;
         PreviewMouseDown += OnListenMouseDown;
-
         SaveBtn.Click += OnSave;
-        CancelBtn.Click += (_, _) => DialogResult = false;
         TestBtn.Click += OnTest;
+
+        SetConfig(current);
+    }
+
+    /// <summary>以指定組態刷新欄位（啟動與外部變更後呼叫）。</summary>
+    public void SetConfig(AppConfig c)
+    {
+        Config = c;
+        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "目前狀態：○ 未設定" : "目前狀態：● 已設定";
+        SelectByTag(VoiceBox, c.Voice ?? DefaultVoiceTag);
+        QueryModelBox.Text = c.Model;
+        _hotkey = HotKeyBinding.Parse(c.Hotkey);
+        UpdateHotkeyStatus();
     }
 
     private void UpdateHotkeyStatus() => HotkeyStatus.Text = "目前：" + _hotkey.DisplayName;
 
-    /// <summary>進入監聽模式：擷取下一個鍵盤組合或滑鼠鍵作為新綁定；`Esc` 取消。</summary>
     private void StartListening()
     {
         _listening = true;
         HotkeyStatus.Text = "請按下快捷鍵…（Esc 取消）";
         ChangeHotkeyBtn.IsEnabled = false;
+        Focus();
         Keyboard.Focus(this);
     }
 
@@ -66,7 +77,7 @@ public partial class SettingsWindow : Window
         UpdateHotkeyStatus();
     }
 
-    private void OnListenKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void OnListenKeyDown(object sender, KeyEventArgs e)
     {
         if (!_listening)
         {
@@ -76,12 +87,12 @@ public partial class SettingsWindow : Window
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key == Key.Escape)
         {
-            StopListening(); // 取消、不變更
+            StopListening();
             return;
         }
         if (IsModifierKey(key))
         {
-            return; // 等待主鍵
+            return;
         }
         uint mods = 0;
         var m = Keyboard.Modifiers;
@@ -99,7 +110,6 @@ public partial class SettingsWindow : Window
         {
             return;
         }
-        // 左右鍵同按（兩鍵皆為 Pressed）
         if (e.LeftButton == MouseButtonState.Pressed && e.RightButton == MouseButtonState.Pressed)
         {
             e.Handled = true;
@@ -112,7 +122,7 @@ public partial class SettingsWindow : Window
             MouseButton.Middle => MouseTrigger.Middle,
             MouseButton.XButton1 => MouseTrigger.XButton1,
             MouseButton.XButton2 => MouseTrigger.XButton2,
-            _ => null, // 單獨左/右鍵不作綁定，放行給正常 UI 操作
+            _ => null,
         };
         if (trig is null)
         {
@@ -148,14 +158,13 @@ public partial class SettingsWindow : Window
 
     private AppConfig Gather() => new(
         string.IsNullOrWhiteSpace(QueryModelBox.Text) ? "gpt-4o-mini" : QueryModelBox.Text.Trim(),
-        ResultConfig.TimeoutSec,
+        Config.TimeoutSec,
         TagOf(VoiceBox),
-        ResultConfig.MaxRetries, // 修正：原先漏帶，存設定會把 MaxRetries 重置為預設 2
+        Config.MaxRetries,
         _hotkey.Serialize(),
-        ResultConfig.HistoryMax,  // 修正：#13 新增後 Gather 漏帶，存設定會把保留上限重置為 200
-        ContextBox.Text.Trim());  // 應用情境提示（spec#8）
+        Config.HistoryMax,   // 保留（#13）
+        Config.Context);     // 保留情境（由情境分頁管理，本頁不重置）
 
-    /// <summary>金鑰欄非空才更新；寫使用者環境變數（持久）＋本行程環境變數（即時生效）。</summary>
     private void ApplyKeyIfProvided()
     {
         var newKey = KeyBox.Password;
@@ -172,13 +181,16 @@ public partial class SettingsWindow : Window
         try
         {
             ApplyKeyIfProvided();
-            ResultConfig = Gather();
-            ResultConfig.Save(System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
-            DialogResult = true;
+            Config = Gather();
+            Config.Save(System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
+            KeyBox.Clear();
+            SetConfig(Config);
+            SettingsChanged?.Invoke(Config);
+            System.Windows.MessageBox.Show("已儲存。", "ScreenTrans 選項");
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("儲存失敗：" + ex.Message, "ScreenTrans 設定");
+            System.Windows.MessageBox.Show("儲存失敗：" + ex.Message, "ScreenTrans 選項");
         }
     }
 
@@ -194,13 +206,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("測試失敗：" + ex.Message, "ScreenTrans 設定");
+            System.Windows.MessageBox.Show("測試失敗：" + ex.Message, "ScreenTrans 選項");
         }
-    }
-
-    protected override void OnClosed(EventArgs e)
-    {
-        (_testSvc as IDisposable)?.Dispose();
-        base.OnClosed(e);
     }
 }

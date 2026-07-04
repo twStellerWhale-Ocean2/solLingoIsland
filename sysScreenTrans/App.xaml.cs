@@ -10,24 +10,26 @@ using WinForms = System.Windows.Forms;
 namespace ScreenTrans;
 
 /// <summary>
-/// 應用進入點：系統匣常駐（無主視窗），全域熱鍵 Alt+L 喚起 capture→query→present 主動線。
-/// 對應 design ＜III.A＞ 單一 WPF exe、[setWi自訂Usr啟動結束常駐]。
+/// 應用進入點：系統匣常駐（無主視窗自動啟動），全域喚起快捷鍵喚起 capture→query→present 主動線。
+/// 維運/檢視整合於單一 Office 式主視窗 <see cref="MainWindow"/>（筆記／歷史／選項／關於分頁，Issue #34），
+/// 取代原 DockWindow／HistoryWindow／NotesWindow／SettingsWindow。
 /// </summary>
 public partial class App : System.Windows.Application
 {
     private SingleInstanceGuard? _instanceGuard;
     private WinForms.NotifyIcon? _tray;
     private WinForms.ToolStripMenuItem? _keyStatusItem;
-    private DockWindow? _dock;
+    private MainWindow? _main;
+    private NotesPage? _notesPage;
+    private HistoryPage? _historyPage;
+    private OptionsPage? _optionsPage;
     private HotKeyService? _hotkey;
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
-    private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個（失焦不再自動關閉）
-    private readonly HistoryStore _historyStore = new(); // 查詢歷史本機儲存（spec#6）
-    private HistoryWindow? _history; // 查詢歷史視窗（獨立、單一實例、非結果視窗）
-    private readonly NotesStore _notesStore = new(); // 我的筆記本機儲存（spec#7）
-    private NotesWindow? _notes; // 我的筆記視窗（獨立、單一實例、非結果視窗）
+    private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個
+    private readonly HistoryStore _historyStore = new();
+    private readonly NotesStore _notesStore = new();
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -35,25 +37,18 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // 單一實例守衛：重複啟動偵測既有實例、明確提示並結束新實例，不重複註冊熱鍵
-        // （design ＜setWi自訂Usr啟動結束常駐＞驗收 row02、＜II.C＞單一實例 invariant）。
         _instanceGuard = SingleInstanceGuard.Acquire();
         if (!_instanceGuard.IsFirstInstance)
         {
-            System.Windows.MessageBox.Show(
-                "ScreenTrans 已在執行中（請見系統匣圖示）。",
-                "ScreenTrans");
+            System.Windows.MessageBox.Show("ScreenTrans 已在執行中（請見系統匣圖示）。", "ScreenTrans");
             Shutdown();
             return;
         }
 
-        // 全域未捕捉例外：寫 log ＋ 顯示，避免靜默閃退
         DispatcherUnhandledException += OnUnhandled;
 
         _config = AppConfig.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-        var keyReady = !string.IsNullOrWhiteSpace(apiKey);
-        // TTS：Windows 內建語音（SAPI，離線免金鑰）；語音由設定選定（[techItem語音合成]）
+        var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
         _tray = new WinForms.NotifyIcon
@@ -62,48 +57,48 @@ public partial class App : System.Windows.Application
             Visible = true,
             Text = TrayText(),
         };
-
         var menu = new WinForms.ContextMenuStrip();
         _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("開啟主控頁", null, (_, _) => OpenDock());
-        menu.Items.Add("查詢歷史…", null, (_, _) => OpenHistory());
-        menu.Items.Add("我的筆記…", null, (_, _) => OpenNotes());
-        menu.Items.Add("設定…", null, OnSettings);
-        menu.Items.Add("關於 ScreenTrans", null, (_, _) => ShowAbout());
+        menu.Items.Add("開啟主視窗", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("查詢歷史", null, (_, _) => OpenMain(MainTab.History));
+        menu.Items.Add("我的筆記", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("選項", null, (_, _) => OpenMain(MainTab.Options));
+        menu.Items.Add("關於", null, (_, _) => OpenMain(MainTab.About));
+        menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("結束", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
-        // 雙擊系統匣圖示＝開啟主控頁
-        _tray.DoubleClick += (_, _) => OpenDock();
+        _tray.DoubleClick += (_, _) => OpenMain(MainTab.Notes);
 
-        // 常駐主控頁（工作列按鈕型可見入口，spec#1）：啟動即建立、預設最小化不擋遊戲；
-        // 關閉視窗＝收合非結束（DockWindow 攔截），與系統匣共用同一組維運動作。
-        _dock = new DockWindow();
-        _dock.RefreshStatus(keyReady, HotkeyDisplay());
-        _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
-        _dock.ExitRequested += ExitApp;
-        _dock.HistoryRequested += OpenHistory;
-        _dock.NotesRequested += OpenNotes;
-        // 主控頁被帶到前景時（工作列按鈕／Alt+Tab／系統匣還原皆會 Activate）關閉 topmost 結果視窗，
-        // 否則結果卡片會蓋住非 topmost 的主控頁，違反 spec#1「工作列可穩定尋得主控入口」。
-        _dock.Activated += (_, _) => CloseResultBeforeMaintenanceUi();
-        _dock.WindowState = WindowState.Minimized;
-        _dock.Show();
+        // 分頁（UserControl）＋統一主視窗
+        _notesPage = new NotesPage(_notesStore, () => _speech);
+        _notesPage.ViewRequested += entry => ShowDetail(entry.ToResult());
+        _historyPage = new HistoryPage(_historyStore, () => _speech);
+        _historyPage.ViewRequested += entry => ShowDetail(entry.ToResult());
+        _historyPage.AddToNotesRequested += entry => AddToNotes(entry.ToResult());
+        _optionsPage = new OptionsPage(_config);
+        _optionsPage.SettingsChanged += ApplySettings;
+
+        _main = new MainWindow(_notesPage, _historyPage, _optionsPage, new AboutPage());
+        _main.RefreshStatus(keyReady, HotkeyDisplay());
+        // 主視窗被帶到前景時關 topmost 結果卡片（否則會蓋住主視窗）
+        _main.Activated += (_, _) => CloseResult();
+        _main.WindowState = WindowState.Minimized;
+        _main.Show();
 
         _hotkey = new HotKeyService();
         _hotkey.HotKeyPressed += OnHotKey;
         RegisterHotkeyOrWarn();
     }
 
-    /// <summary>明確結束常駐：允許主控頁真正關閉後 Shutdown（關主控視窗本身只收合、不結束）。</summary>
+    /// <summary>明確結束常駐：允許主視窗真正關閉後 Shutdown（關主視窗本身只收合、不結束）。</summary>
     private void ExitApp()
     {
-        _dock?.AllowClose();
+        _main?.AllowClose();
         Shutdown();
     }
 
-    /// <summary>以當前組態綁定註冊喚起快捷鍵；失敗（被占用／hook 安裝失敗）明確提示、程式仍常駐。</summary>
     private void RegisterHotkeyOrWarn()
     {
         if (_hotkey is null)
@@ -113,7 +108,7 @@ public partial class App : System.Windows.Application
         if (!_hotkey.Register(HotKeyBinding.Parse(_config.Hotkey)))
         {
             System.Windows.MessageBox.Show(
-                $"喚起快捷鍵「{HotkeyDisplay()}」註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，可於「設定」改用其他快捷鍵。",
+                $"喚起快捷鍵「{HotkeyDisplay()}」註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，可於「選項」改用其他快捷鍵。",
                 "ScreenTrans");
         }
     }
@@ -122,7 +117,6 @@ public partial class App : System.Windows.Application
 
     private string TrayText() => AppStatusText.TrayTip(HotkeyDisplay());
 
-    /// <summary>從打包的 assets/app.ico 資源載入指定尺寸圖示；失敗退回系統預設。</summary>
     private static Icon LoadAppIcon(System.Drawing.Size size)
     {
         try
@@ -143,30 +137,27 @@ public partial class App : System.Windows.Application
         try { File.WriteAllText(LogPath, DateTime.Now + "\n" + args.Exception); }
         catch { /* log 寫入失敗不致命 */ }
         System.Windows.MessageBox.Show(
-            "發生錯誤（已記錄至 " + LogPath + "）：\n\n" + args.Exception.Message,
-            "ScreenTrans 錯誤");
-        args.Handled = true; // 攔下，避免整支程式閃退
+            "發生錯誤（已記錄至 " + LogPath + "）：\n\n" + args.Exception.Message, "ScreenTrans 錯誤");
+        args.Handled = true;
     }
 
-    /// <summary>Alt+L 喚起：遮罩選區截圖 → vision 查詢 → 結果視窗＋朗讀。</summary>
+    /// <summary>喚起：遮罩選區截圖 → vision 查詢 → 結果視窗＋朗讀＋歷史留存。</summary>
     private async void OnHotKey()
     {
         if (_busy)
         {
-            return; // 一次一圈，避免重入
+            return;
         }
         _busy = true;
         try
         {
-            // 結果視窗失焦不再自動關閉：新查詢一開始即關閉前一結果視窗——須在遮罩截圖「之前」，
-            // 否則前一結果視窗仍為 topmost，選區若與其重疊會把舊卡片截進畫面（同時亦維持至多一個）。
-            CloseResult();
+            CloseResult(); // 新查詢一開始即關前一結果視窗（守衛，Issue #32）
 
             var mask = new MaskWindow();
             mask.ShowDialog();
             if (mask.Result is null)
             {
-                return; // 取消或空選（以 Result 判定，不靠 DialogResult）
+                return;
             }
 
             var win = NewResultWindow();
@@ -180,13 +171,12 @@ public partial class App : System.Windows.Application
                 var result = await query.QueryAsync(mask.Result.PngBytes);
                 if (!result.IsEmpty)
                 {
-                    // 查詢成功即留存（新在前、截汰最舊）；即使該視窗已被取代仍記錄本次查詢
                     _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);
-                    _history?.Reload(); // 歷史視窗開著則即時反映新紀錄
+                    _historyPage?.Reload();
                 }
                 if (!ReferenceEquals(_result, win))
                 {
-                    return; // 載入中該視窗已被維運 UI 關閉或被新查詢取代：捨棄遲來結果，免對已關視窗填內容/幽靈朗讀
+                    return;
                 }
                 win.ShowResult(result, _speech!);
             }
@@ -194,7 +184,7 @@ public partial class App : System.Windows.Application
             {
                 if (!ReferenceEquals(_result, win))
                 {
-                    return; // 同上：視窗已不在，錯誤亦不再顯示於該視窗
+                    return;
                 }
                 win.ShowError(ex.Message);
             }
@@ -209,108 +199,24 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>
-    /// 開啟任一維運 UI（主控頁／設定／關於）前先關閉前一結果視窗。
-    /// 結果視窗 <c>Topmost</c>，且移除失焦自動關閉後不再於維運視窗開啟時自動消失；
-    /// 這些維運視窗無 owner／非 topmost，若不先關結果卡片會被蓋在其下而看不到、用不到
-    /// （並還原本 issue 前「開維運 UI 即關結果」之時序）。設定路徑另需在 dispose 舊語音服務前關閉。
-    /// </summary>
-    private void CloseResultBeforeMaintenanceUi() => CloseResult();
-
-    /// <summary>
-    /// 關閉結果視窗之單一守衛（Issue #32）：先解 <c>_result</c> 參考再關閉，僅在未進入關閉序列時
-    /// 才 <c>Close()</c>；極端交錯（多路徑同時關閉、共用滑鼠鍵觸發焦點轉移再關閉）以 catch 兜底，
-    /// 避免「Cannot call Close while a Window is closing」重入崩潰。所有關閉結果視窗之處一律走此。
-    /// </summary>
-    private void CloseResult()
-    {
-        var r = _result;
-        if (r is null)
-        {
-            return;
-        }
-        _result = null; // 先解參考，避免任何重入路徑再次關閉同一視窗
-        if (r.IsClosing)
-        {
-            return;
-        }
-        try { r.Close(); }
-        catch (InvalidOperationException) { /* 已在關閉序列中，忽略 */ }
-    }
-
-    /// <summary>系統匣「開啟主控頁」／雙擊圖示：先關結果視窗（免遮蔽）再還原主控頁。</summary>
-    private void OpenDock()
-    {
-        CloseResultBeforeMaintenanceUi();
-        _dock?.RestoreFromTray();
-    }
-
-    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛歷史/筆記/收藏入口事件）。</summary>
+    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛收藏入口，Issue #34 移除歷史/筆記入口）。</summary>
     private ResultWindow NewResultWindow()
     {
         var win = new ResultWindow();
         _result = win;
         win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
-        win.HistoryRequested += OpenHistory;
-        win.NotesRequested += OpenNotes;
         win.AddToNotesRequested += AddToNotes;
         return win;
     }
 
-    /// <summary>
-    /// 開啟查詢歷史視窗（spec#6；結果視窗按鈕／常駐主控頁／系統匣皆可觸發）。
-    /// 歷史為獨立視窗、單一實例；先關 topmost 結果卡片免遮蔽，再開啟或還原歷史視窗。
-    /// </summary>
-    private void OpenHistory()
+    /// <summary>開啟統一主視窗並切到指定分頁（tray／入口）；先關 topmost 結果卡片免遮蔽。</summary>
+    private void OpenMain(MainTab tab)
     {
-        CloseResultBeforeMaintenanceUi();
-        if (_history is null)
-        {
-            _history = new HistoryWindow(_historyStore, () => _speech);
-            _history.ViewRequested += e => ShowDetail(e.ToResult());
-            _history.AddToNotesRequested += e => AddToNotes(e.ToResult());
-            _history.Closed += (_, _) => _history = null;
-            _history.Show();
-        }
-        else
-        {
-            _history.Reload();
-            if (_history.WindowState == WindowState.Minimized)
-            {
-                _history.WindowState = WindowState.Normal;
-            }
-            _history.Show();
-            _history.Activate();
-        }
+        CloseResult();
+        _main?.ShowTab(tab);
     }
 
-    /// <summary>
-    /// 開啟我的筆記視窗（spec#7；結果視窗按鈕／歷史／常駐主控頁／系統匣皆可觸發）。
-    /// 筆記為獨立視窗、單一實例；先關 topmost 結果卡片免遮蔽。
-    /// </summary>
-    private void OpenNotes()
-    {
-        CloseResultBeforeMaintenanceUi();
-        if (_notes is null)
-        {
-            _notes = new NotesWindow(_notesStore, () => _speech);
-            _notes.ViewRequested += e => ShowDetail(e.ToResult());
-            _notes.Closed += (_, _) => _notes = null;
-            _notes.Show();
-        }
-        else
-        {
-            _notes.Reload();
-            if (_notes.WindowState == WindowState.Minimized)
-            {
-                _notes.WindowState = WindowState.Normal;
-            }
-            _notes.Show();
-            _notes.Activate();
-        }
-    }
-
-    /// <summary>加入我的筆記（去重）：由結果視窗或歷史條目觸發，右下角 toast 回饋（spec#7）。</summary>
+    /// <summary>加入我的筆記（去重）：結果視窗、自動加入或歷史條目觸發，右下角 toast 回饋（spec#7）。</summary>
     private void AddToNotes(QueryResult r)
     {
         var msg = _notesStore.AddAndSave(r, DateTimeOffset.Now) switch
@@ -320,7 +226,7 @@ public partial class App : System.Windows.Application
             _ => "無可收藏內容",
         };
         ToastNotifier.Show(msg);
-        _notes?.Reload(); // 筆記視窗開著則即時反映
+        _notesPage?.Reload();
     }
 
     /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）。</summary>
@@ -332,33 +238,15 @@ public partial class App : System.Windows.Application
         win.ShowResult(r, _speech!);
     }
 
-    /// <summary>系統匣「關於」：先關結果視窗（免遮蔽）再顯示說明。</summary>
-    private void ShowAbout()
+    /// <summary>選項分頁儲存後套用：重建語音服務、重註冊熱鍵、更新狀態；關前一結果視窗（不續用已釋放服務）。</summary>
+    private void ApplySettings(AppConfig cfg)
     {
-        CloseResultBeforeMaintenanceUi();
-        System.Windows.MessageBox.Show(
-            $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
-            "關於 ScreenTrans");
-    }
-
-    /// <summary>系統匣「設定…」：開設定視窗，儲存後套用（重建語音服務、更新金鑰狀態列）。</summary>
-    private void OnSettings(object? sender, EventArgs e)
-    {
-        // 開設定「之前」先關前一結果視窗：免其 topmost 卡片蓋住設定視窗，
-        // 亦免存檔後 dispose 舊語音服務時該視窗續持已釋放服務（點播放/單字呼叫已釋放合成器）。
-        CloseResultBeforeMaintenanceUi();
-
-        var dlg = new SettingsWindow(_config);
-        if (dlg.ShowDialog() != true)
-        {
-            return;
-        }
-        _config = dlg.ResultConfig;
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+        _config = cfg;
+        CloseResult();
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
-        RegisterHotkeyOrWarn(); // 快捷鍵可能已變更，重新註冊
-        var keyReady = !string.IsNullOrWhiteSpace(apiKey);
+        RegisterHotkeyOrWarn();
+        var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         if (_tray is not null)
         {
             _tray.Text = TrayText();
@@ -367,12 +255,32 @@ public partial class App : System.Windows.Application
         {
             _keyStatusItem.Text = AppStatusText.KeyStatus(keyReady);
         }
-        _dock?.RefreshStatus(keyReady, HotkeyDisplay()); // 主控頁與系統匣同步（單一來源）
+        _main?.RefreshStatus(keyReady, HotkeyDisplay());
+    }
+
+    /// <summary>
+    /// 關閉結果視窗之單一守衛（Issue #32）：先解 <c>_result</c> 參考再關閉，僅在未進入關閉序列時
+    /// 才 <c>Close()</c>；極端交錯以 catch 兜底，避免「Cannot call Close while a Window is closing」重入崩潰。
+    /// </summary>
+    private void CloseResult()
+    {
+        var r = _result;
+        if (r is null)
+        {
+            return;
+        }
+        _result = null;
+        if (r.IsClosing)
+        {
+            return;
+        }
+        try { r.Close(); }
+        catch (InvalidOperationException) { /* 已在關閉序列中，忽略 */ }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _dock?.AllowClose(); // 確保結束流程中主控頁可真正關閉（不被收合攔截卡住）
+        _main?.AllowClose();
         _hotkey?.Dispose();
         (_speech as IDisposable)?.Dispose();
         if (_tray is not null)
