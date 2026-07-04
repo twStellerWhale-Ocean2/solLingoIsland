@@ -150,6 +150,10 @@ public partial class App : System.Windows.Application
         _busy = true;
         try
         {
+            // 結果視窗失焦不再自動關閉：新查詢一開始即關閉前一結果視窗——須在遮罩截圖「之前」，
+            // 否則前一結果視窗仍為 topmost，選區若與其重疊會把舊卡片截進畫面（同時亦維持至多一個）。
+            _result?.Close();
+
             var mask = new MaskWindow();
             mask.ShowDialog();
             if (mask.Result is null)
@@ -157,8 +161,6 @@ public partial class App : System.Windows.Application
                 return; // 取消或空選（以 Result 判定，不靠 DialogResult）
             }
 
-            // 結果視窗失焦不再自動關閉，故新查詢須主動關閉取代前一個，避免浮窗堆疊（同時至多一個）。
-            _result?.Close();
             var win = new ResultWindow();
             _result = win;
             win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
