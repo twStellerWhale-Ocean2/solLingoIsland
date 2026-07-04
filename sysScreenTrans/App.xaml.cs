@@ -18,6 +18,7 @@ public partial class App : System.Windows.Application
     private SingleInstanceGuard? _instanceGuard;
     private WinForms.NotifyIcon? _tray;
     private WinForms.ToolStripMenuItem? _keyStatusItem;
+    private DockWindow? _dock;
     private HotKeyService? _hotkey;
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
@@ -58,21 +59,39 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new WinForms.ContextMenuStrip();
-        _keyStatusItem = new WinForms.ToolStripMenuItem(
-            keyReady ? "● 金鑰已備妥（OPENAI_API_KEY）" : "○ 金鑰未設定（OPENAI_API_KEY）") { Enabled = false };
+        _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("開啟主控頁", null, (_, _) => _dock?.RestoreFromTray());
         menu.Items.Add("設定…", null, OnSettings);
         menu.Items.Add("關於 ScreenTrans", null, (_, _) =>
             System.Windows.MessageBox.Show(
                 $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
                 "關於 ScreenTrans"));
-        menu.Items.Add("結束", null, (_, _) => Shutdown());
+        menu.Items.Add("結束", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
+        // 雙擊系統匣圖示＝開啟主控頁
+        _tray.DoubleClick += (_, _) => _dock?.RestoreFromTray();
+
+        // 常駐主控頁（工作列按鈕型可見入口，spec#1）：啟動即建立、預設最小化不擋遊戲；
+        // 關閉視窗＝收合非結束（DockWindow 攔截），與系統匣共用同一組維運動作。
+        _dock = new DockWindow();
+        _dock.RefreshStatus(keyReady, HotkeyDisplay());
+        _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
+        _dock.ExitRequested += ExitApp;
+        _dock.WindowState = WindowState.Minimized;
+        _dock.Show();
 
         _hotkey = new HotKeyService();
         _hotkey.HotKeyPressed += OnHotKey;
         RegisterHotkeyOrWarn();
+    }
+
+    /// <summary>明確結束常駐：允許主控頁真正關閉後 Shutdown（關主控視窗本身只收合、不結束）。</summary>
+    private void ExitApp()
+    {
+        _dock?.AllowClose();
+        Shutdown();
     }
 
     /// <summary>以當前組態綁定註冊喚起快捷鍵；失敗（被占用／hook 安裝失敗）明確提示、程式仍常駐。</summary>
@@ -92,7 +111,7 @@ public partial class App : System.Windows.Application
 
     private string HotkeyDisplay() => HotKeyBinding.Parse(_config.Hotkey).DisplayName;
 
-    private string TrayText() => $"ScreenTrans — 遊戲畫面英文查詢（{HotkeyDisplay()}）";
+    private string TrayText() => AppStatusText.TrayTip(HotkeyDisplay());
 
     /// <summary>從打包的 assets/app.ico 資源載入指定尺寸圖示；失敗退回系統預設。</summary>
     private static Icon LoadAppIcon(System.Drawing.Size size)
@@ -176,20 +195,21 @@ public partial class App : System.Windows.Application
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
         RegisterHotkeyOrWarn(); // 快捷鍵可能已變更，重新註冊
+        var keyReady = !string.IsNullOrWhiteSpace(apiKey);
         if (_tray is not null)
         {
             _tray.Text = TrayText();
         }
         if (_keyStatusItem is not null)
         {
-            _keyStatusItem.Text = string.IsNullOrWhiteSpace(apiKey)
-                ? "○ 金鑰未設定（OPENAI_API_KEY）"
-                : "● 金鑰已備妥（OPENAI_API_KEY）";
+            _keyStatusItem.Text = AppStatusText.KeyStatus(keyReady);
         }
+        _dock?.RefreshStatus(keyReady, HotkeyDisplay()); // 主控頁與系統匣同步（單一來源）
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _dock?.AllowClose(); // 確保結束流程中主控頁可真正關閉（不被收合攔截卡住）
         _hotkey?.Dispose();
         (_speech as IDisposable)?.Dispose();
         if (_tray is not null)
