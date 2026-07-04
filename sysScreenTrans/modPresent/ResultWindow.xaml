@@ -3,44 +3,22 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True"
-        Width="560" Height="380" MinWidth="320" MinHeight="200"
+        Width="560" Height="400" MinWidth="320" MinHeight="220"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen">
-  <Window.Resources>
-    <Style x:Key="Pill" TargetType="Button">
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Height" Value="28"/>
-      <Setter Property="Margin" Value="6,0,0,0"/>
-      <Setter Property="Foreground" Value="#B0688A"/>
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="8" Background="#FBE4EC" Padding="9,3">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="#F4C2D0"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-  </Window.Resources>
   <Border Background="#FFF0F5" CornerRadius="14" BorderBrush="#F4C2D0" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="44"/>
         <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- 浮水印底圖（兩位女孩，極淡、不擋點擊） -->
-      <Image Grid.Row="0" Grid.RowSpan="2" Source="pack://application:,,,/assets/icon.png"
+      <Image Grid.Row="0" Grid.RowSpan="3" Source="pack://application:,,,/assets/icon.png"
              Opacity="0.10" Stretch="Uniform" IsHitTestVisible="False"
              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,28,20,20"/>
 
-      <!-- 標題列：拖曳可移動視窗（Background=Transparent 才可命中拖曳） -->
+      <!-- 標題列：拖曳可移動視窗 -->
       <Grid x:Name="HeaderBar" Grid.Row="0" Background="Transparent" ToolTip="拖曳可移動視窗">
         <TextBlock Text="查詢結果" Foreground="#B0688A" FontSize="16"
                    VerticalAlignment="Center" Margin="18,0"/>
@@ -49,10 +27,10 @@
 
       <!-- 內容區：過長可捲動 -->
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel x:Name="BodyPanel" Margin="18,14,18,22"/>
+        <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
       </ScrollViewer>
 
-      <!-- 右下角縮放握把 -->
+      <!-- 右下角縮放握把（置於內容區右下） -->
       <Thumb x:Name="ResizeGrip" Grid.Row="1"
              HorizontalAlignment="Right" VerticalAlignment="Bottom"
              Width="22" Height="22" Margin="0,0,3,3" Cursor="SizeNWSE"
@@ -66,15 +44,7 @@
         </Thumb.Template>
       </Thumb>
 
-      <!-- 入口按鈕（spec#6/#7）：加入我的筆記／展示我的筆記／展示歷史紀錄 -->
-      <StackPanel Grid.Row="0" Orientation="Horizontal"
-                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,46,0">
-        <Button x:Name="AddNoteBtn" Style="{StaticResource Pill}" Content="＋ 筆記" ToolTip="加入我的筆記"/>
-        <Button x:Name="NotesBtn" Style="{StaticResource Pill}" Content="📒 我的筆記" ToolTip="展示我的筆記"/>
-        <Button x:Name="HistoryBtn" Style="{StaticResource Pill}" Content="🕘 歷史" ToolTip="展示查詢歷史紀錄"/>
-      </StackPanel>
-
-      <!-- 右上角關閉鈕：置於 HeaderBar 之上、獨立命中，點擊不觸發拖曳 -->
+      <!-- 右上角關閉鈕 -->
       <Button x:Name="CloseBtn" Grid.Row="0"
               HorizontalAlignment="Right" VerticalAlignment="Top"
               Width="32" Height="32" Margin="0,6,8,0" Cursor="Hand" ToolTip="關閉（ESC）">
@@ -92,6 +62,30 @@
           </ControlTemplate>
         </Button.Template>
       </Button>
+
+      <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記；移除原歷史/我的筆記入口 -->
+      <Grid Grid.Row="2">
+        <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
+        <StackPanel Orientation="Horizontal" Margin="16,10,16,12" VerticalAlignment="Center">
+          <Button x:Name="AddNoteBtn" Cursor="Hand" ToolTip="加入我的筆記">
+            <Button.Template>
+              <ControlTemplate TargetType="Button">
+                <Border x:Name="bg" CornerRadius="8" Background="#E9F6EE" BorderBrush="#C9E6D3"
+                        BorderThickness="1" Padding="12,5">
+                  <TextBlock Text="＋ 加入我的筆記" FontSize="13.5" Foreground="#2F6F4A"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                  <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="bg" Property="Background" Value="#D9EFE0"/>
+                  </Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Button.Template>
+          </Button>
+          <CheckBox x:Name="AutoAddChk" Content="自動加入筆記" Margin="14,0,0,0"
+                    VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
+        </StackPanel>
+      </Grid>
     </Grid>
   </Border>
 </Window>

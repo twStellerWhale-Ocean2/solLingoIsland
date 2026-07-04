@@ -3,15 +3,17 @@ using System.Text.Json;
 
 namespace ScreenTrans.Query;
 
-/// <summary>一個自訂類別資料夾：Id＋名稱＋有序條目清單（新在前）。</summary>
+/// <summary>一個自訂類別資料夾：Id＋名稱＋<b>子資料夾</b>（多層）＋有序條目清單（新在前）。</summary>
 public sealed class NoteFolder
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "";
+    /// <summary>子資料夾（多層樹；Issue #34）。舊平面 notes.json 無此鍵 → 反序列化為空、即單層。</summary>
+    public List<NoteFolder> Folders { get; set; } = new();
     public List<NoteEntry> Entries { get; set; } = new();
 }
 
-/// <summary>我的筆記根結構：資料夾清單。</summary>
+/// <summary>我的筆記根結構：頂層資料夾清單（每個可再含子資料夾）。</summary>
 public sealed class NotesData
 {
     public List<NoteFolder> Folders { get; set; } = new();
@@ -21,14 +23,13 @@ public sealed class NotesData
 public enum NoteAddResult { Added, AlreadyExists, Empty }
 
 /// <summary>
-/// 我的筆記本機儲存（[modQuery模組] 我的筆記儲存契約，spec#7）。存
-/// <c>%APPDATA%\ScreenTrans\notes.json</c>（與 <c>history.json</c>／<c>ui-state.json</c> 同資料夾、各自檔名）。
-/// 加入以英文原文正規化去重（跨全部資料夾）；資料夾 CRUD、同夾排序、跨夾移動皆為不依賴 UI 之純函式、可單元測試。
-/// 讀取失敗退空結構、寫入失敗靜默降級——皆不致命；金鑰不入筆記；不受 <c>paramHistoryMax</c>／歷史清除影響。
+/// 我的筆記本機儲存（[modQuery模組] 我的筆記儲存契約，spec#7；Issue #34 樹化）。存
+/// <c>%APPDATA%\ScreenTrans\notes.json</c>。資料夾為**多層樹**（向後相容舊平面）；加入以英文原文正規化
+/// 跨全樹去重；資料夾 CRUD（含子夾）、條目排序、節點移動（防移入自身/子孫成環）皆為不依賴 UI 之純函式、可單元測試。
+/// 讀取失敗退空結構、寫入失敗靜默降級——皆不致命；金鑰不入筆記；不受歷史清除影響。
 /// </summary>
 public sealed class NotesStore
 {
-    /// <summary>預設資料夾名稱（首次或清空後自動具備一個容器）。</summary>
     public const string DefaultFolderName = "我的筆記";
 
     private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
@@ -41,7 +42,6 @@ public sealed class NotesStore
 
     public static string DefaultPath => Path.Combine(DefaultDir, "notes.json");
 
-    /// <summary>讀出筆記；缺檔或格式毀損 → 空結構、不致命。</summary>
     public NotesData Load()
     {
         try
@@ -54,7 +54,6 @@ public sealed class NotesStore
         }
     }
 
-    /// <summary>讀出並確保至少一個（預設）資料夾。</summary>
     public NotesData LoadEnsured()
     {
         var d = Load();
@@ -62,7 +61,6 @@ public sealed class NotesStore
         return d;
     }
 
-    /// <summary>確保至少一個資料夾（供加入與刪夾後不致無容器）。</summary>
     public static void Ensure(NotesData d)
     {
         if (d.Folders.Count == 0)
@@ -71,7 +69,6 @@ public sealed class NotesStore
         }
     }
 
-    /// <summary>寫回 notes.json；寫入失敗靜默降級、不致命。</summary>
     public void Save(NotesData d)
     {
         try
@@ -82,7 +79,6 @@ public sealed class NotesStore
         catch { /* 寫入失敗不影響主流程 */ }
     }
 
-    /// <summary>便利方法：讀出→加入（去重）→若確有加入則存回；回傳結果供 toast 回饋。</summary>
     public NoteAddResult AddAndSave(QueryResult r, DateTimeOffset now)
     {
         var d = LoadEnsured();
@@ -94,13 +90,31 @@ public sealed class NotesStore
         return res;
     }
 
-    // ---- 純函式（可單元測試，不觸檔案） ----
+    // ---- 純函式（樹感知，可單元測試） ----
 
-    /// <summary>某去重鍵是否已存在於任一資料夾。</summary>
+    /// <summary>樹的前序走訪（含所有子資料夾）。</summary>
+    public static IEnumerable<NoteFolder> AllFolders(NotesData d) => Walk(d.Folders);
+
+    private static IEnumerable<NoteFolder> Walk(IEnumerable<NoteFolder> folders)
+    {
+        foreach (var f in folders)
+        {
+            yield return f;
+            foreach (var s in Walk(f.Folders))
+            {
+                yield return s;
+            }
+        }
+    }
+
+    public static NoteFolder? FindFolder(NotesData d, string id) =>
+        AllFolders(d).FirstOrDefault(f => f.Id == id);
+
+    /// <summary>某去重鍵是否已存在於樹中任一資料夾。</summary>
     public static bool Contains(NotesData d, string key) =>
-        !string.IsNullOrEmpty(key) && d.Folders.Any(f => f.Entries.Any(e => e.Key == key));
+        !string.IsNullOrEmpty(key) && AllFolders(d).Any(f => f.Entries.Any(e => e.Key == key));
 
-    /// <summary>加入至第一個資料夾頂端；空原文回 Empty、已存在（跨夾去重）回 AlreadyExists。</summary>
+    /// <summary>加入至第一個頂層資料夾頂端；空原文回 Empty、已存在（跨全樹去重）回 AlreadyExists。</summary>
     public static NoteAddResult AddTo(NotesData d, NoteEntry entry)
     {
         if (string.IsNullOrEmpty(entry.Key))
@@ -116,33 +130,65 @@ public sealed class NotesStore
         return NoteAddResult.Added;
     }
 
+    /// <summary>新增頂層資料夾。</summary>
     public static NoteFolder AddFolder(NotesData d, string name)
     {
-        var f = new NoteFolder { Name = string.IsNullOrWhiteSpace(name) ? "新資料夾" : name.Trim() };
+        var f = new NoteFolder { Name = Clean(name) };
         d.Folders.Add(f);
+        return f;
+    }
+
+    /// <summary>於指定父夾下新增子資料夾（找不到父夾回 null）。</summary>
+    public static NoteFolder? AddSubFolder(NotesData d, string parentId, string name)
+    {
+        var p = FindFolder(d, parentId);
+        if (p is null)
+        {
+            return null;
+        }
+        var f = new NoteFolder { Name = Clean(name) };
+        p.Folders.Add(f);
         return f;
     }
 
     public static void RenameFolder(NotesData d, string id, string name)
     {
-        var f = d.Folders.FirstOrDefault(x => x.Id == id);
+        var f = FindFolder(d, id);
         if (f is not null && !string.IsNullOrWhiteSpace(name))
         {
             f.Name = name.Trim();
         }
     }
 
-    /// <summary>刪除資料夾（連同其條目）；刪後確保仍有預設資料夾。</summary>
+    /// <summary>刪除資料夾（連其子孫與條目）；刪後確保仍有預設資料夾。</summary>
     public static void RemoveFolder(NotesData d, string id)
     {
-        d.Folders.RemoveAll(f => f.Id == id);
+        RemoveFolderById(d.Folders, id);
         Ensure(d);
     }
 
-    /// <summary>自任一資料夾刪除指定條目。</summary>
+    private static bool RemoveFolderById(List<NoteFolder> list, string id)
+    {
+        var i = list.FindIndex(f => f.Id == id);
+        if (i >= 0)
+        {
+            list.RemoveAt(i);
+            return true;
+        }
+        foreach (var f in list)
+        {
+            if (RemoveFolderById(f.Folders, id))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>自樹中任一資料夾刪除指定條目。</summary>
     public static void RemoveEntry(NotesData d, string entryId)
     {
-        foreach (var f in d.Folders)
+        foreach (var f in AllFolders(d))
         {
             f.Entries.RemoveAll(e => e.Id == entryId);
         }
@@ -151,19 +197,19 @@ public sealed class NotesStore
     /// <summary>將條目移動到目標資料夾頂端（跨夾歸類）。</summary>
     public static void MoveEntry(NotesData d, string entryId, string toFolderId)
     {
-        var to = d.Folders.FirstOrDefault(f => f.Id == toFolderId);
+        var to = FindFolder(d, toFolderId);
         if (to is null)
         {
             return;
         }
-        foreach (var f in d.Folders)
+        foreach (var f in AllFolders(d))
         {
             var idx = f.Entries.FindIndex(e => e.Id == entryId);
             if (idx >= 0)
             {
                 if (ReferenceEquals(f, to))
                 {
-                    return; // 已在目標夾
+                    return;
                 }
                 var e = f.Entries[idx];
                 f.Entries.RemoveAt(idx);
@@ -171,6 +217,58 @@ public sealed class NotesStore
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// 移動資料夾節點到新父夾（<paramref name="toParentId"/> 為 null＝移到頂層）。
+    /// **防成環**：不得移入自身或其子孫；找不到節點/父夾回 false。
+    /// </summary>
+    public static bool MoveFolder(NotesData d, string folderId, string? toParentId)
+    {
+        var node = FindFolder(d, folderId);
+        if (node is null)
+        {
+            return false;
+        }
+        List<NoteFolder> target;
+        if (toParentId is null)
+        {
+            target = d.Folders;
+        }
+        else
+        {
+            var p = FindFolder(d, toParentId);
+            if (p is null || p.Id == folderId || IsDescendant(node, p.Id))
+            {
+                return false; // 移入自身或子孫 → 拒絕（防環）
+            }
+            target = p.Folders;
+        }
+        if (!DetachFolder(d.Folders, node))
+        {
+            return false;
+        }
+        target.Add(node);
+        return true;
+    }
+
+    private static bool IsDescendant(NoteFolder node, string maybeDescendantId) =>
+        Walk(node.Folders).Any(f => f.Id == maybeDescendantId);
+
+    private static bool DetachFolder(List<NoteFolder> list, NoteFolder node)
+    {
+        if (list.Remove(node))
+        {
+            return true;
+        }
+        foreach (var f in list)
+        {
+            if (DetachFolder(f.Folders, node))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>同一資料夾內把條目自 from 位置移到 to 位置（拖曳排序）。</summary>
@@ -189,4 +287,6 @@ public sealed class NotesStore
         f.Entries.RemoveAt(from);
         f.Entries.Insert(to, e);
     }
+
+    private static string Clean(string name) => string.IsNullOrWhiteSpace(name) ? "新資料夾" : name.Trim();
 }

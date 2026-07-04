@@ -184,4 +184,81 @@ public class NotesStoreTests
         Assert.Equal("p", r.Phonetic);
         Assert.Equal("t", r.Translation);
     }
+
+    // ---- 多層樹（Issue #34） ----
+
+    [Fact]
+    public void AddSubFolder_NestsUnderParent()
+    {
+        var d = new NotesData();
+        var top = NotesStore.AddFolder(d, "生字");
+        var sub = NotesStore.AddSubFolder(d, top.Id, "動詞");
+        Assert.NotNull(sub);
+        Assert.Contains(top.Folders, f => f.Id == sub!.Id);
+        Assert.NotNull(NotesStore.FindFolder(d, sub!.Id)); // 樹走訪找得到
+    }
+
+    [Fact]
+    public void Contains_And_Remove_Recurse_IntoSubFolders()
+    {
+        var d = new NotesData();
+        var top = NotesStore.AddFolder(d, "生字");
+        var sub = NotesStore.AddSubFolder(d, top.Id, "動詞")!;
+        sub.Entries.Add(E("run"));
+        Assert.True(NotesStore.Contains(d, NoteEntry.KeyOf("RUN"))); // 跨層去重
+        var id = sub.Entries[0].Id;
+        NotesStore.RemoveEntry(d, id);
+        Assert.Empty(sub.Entries);
+    }
+
+    [Fact]
+    public void MoveFolder_ToTop_And_UnderAnother()
+    {
+        var d = new NotesData();
+        var a = NotesStore.AddFolder(d, "A");
+        var b = NotesStore.AddFolder(d, "B");
+        var sub = NotesStore.AddSubFolder(d, a.Id, "sub")!;
+
+        Assert.True(NotesStore.MoveFolder(d, sub.Id, b.Id)); // sub 移到 B 下
+        Assert.Empty(a.Folders);
+        Assert.Contains(b.Folders, f => f.Id == sub.Id);
+
+        Assert.True(NotesStore.MoveFolder(d, sub.Id, null)); // sub 移到頂層
+        Assert.Contains(d.Folders, f => f.Id == sub.Id);
+        Assert.Empty(b.Folders);
+    }
+
+    [Fact]
+    public void MoveFolder_IntoSelfOrDescendant_IsRejected_NoCycle()
+    {
+        var d = new NotesData();
+        var a = NotesStore.AddFolder(d, "A");
+        var child = NotesStore.AddSubFolder(d, a.Id, "child")!;
+
+        Assert.False(NotesStore.MoveFolder(d, a.Id, a.Id));      // 移入自身
+        Assert.False(NotesStore.MoveFolder(d, a.Id, child.Id));  // 移入子孫
+        // 樹結構未被破壞：a 仍在頂層、child 仍在 a 之下
+        Assert.Contains(d.Folders, f => f.Id == a.Id);
+        Assert.Contains(a.Folders, f => f.Id == child.Id);
+    }
+
+    [Fact]
+    public void Load_LegacyFlatJson_UpgradesToTree_NoDataLoss()
+    {
+        // 舊平面 notes.json（NoteFolder 無 Folders 子夾鍵）
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"Folders\":[{\"Id\":\"f1\",\"Name\":\"我的筆記\"," +
+            "\"Entries\":[{\"Id\":\"e1\",\"AddedAt\":\"2026-07-04T00:00:00+00:00\"," +
+            "\"Original\":\"hello\",\"Phonetic\":\"h\",\"Translation\":\"哈囉\"}]}]}");
+        try
+        {
+            var d = new NotesStore(path).Load();
+            Assert.Single(d.Folders);
+            Assert.Empty(d.Folders[0].Folders);            // 無子夾＝單層
+            Assert.Single(d.Folders[0].Entries);
+            Assert.Equal("hello", d.Folders[0].Entries[0].Original);
+        }
+        finally { File.Delete(path); }
+    }
 }

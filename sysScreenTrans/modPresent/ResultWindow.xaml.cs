@@ -38,13 +38,7 @@ public partial class ResultWindow : Window
     /// <summary>是否已進入關閉序列（供呼叫端避免對關閉中視窗重複 Close，Issue #32）。</summary>
     public bool IsClosing => _closing;
 
-    /// <summary>按「展示歷史紀錄」時觸發（呼叫端開查詢歷史視窗，spec#6）。</summary>
-    public event Action? HistoryRequested;
-
-    /// <summary>按「展示我的筆記」時觸發（呼叫端開我的筆記視窗，spec#7）。</summary>
-    public event Action? NotesRequested;
-
-    /// <summary>按「加入我的筆記」時觸發（傳目前結果，呼叫端去重加入並 toast，spec#7）。</summary>
+    /// <summary>按「加入我的筆記」或勾選「自動加入筆記」時觸發（傳目前結果，呼叫端去重加入並 toast，spec#7）。</summary>
     public event Action<QueryResult>? AddToNotesRequested;
 
     public ResultWindow()
@@ -55,8 +49,6 @@ public partial class ResultWindow : Window
         HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
         ResizeGrip.DragDelta += OnResizeDelta;
         CloseBtn.Click += (_, _) => CloseOnce();
-        HistoryBtn.Click += (_, _) => HistoryRequested?.Invoke();
-        NotesBtn.Click += (_, _) => NotesRequested?.Invoke();
         AddNoteBtn.Click += (_, _) =>
         {
             if (_current is { IsEmpty: false } r)
@@ -64,6 +56,9 @@ public partial class ResultWindow : Window
                 AddToNotesRequested?.Invoke(r);
             }
         };
+        AutoAddChk.IsChecked = AutoAddSettings.Enabled;
+        AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
+        AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
@@ -194,6 +189,12 @@ public partial class ResultWindow : Window
         if (AutoPlaySettings.Chinese)
         {
             speech.Speak(r.Translation, "zh-TW", stopPrevious: !AutoPlaySettings.English);
+        }
+
+        // 自動加入筆記（Issue #34）：勾選後查詢成功即去重收藏（App 端 AddToNotes 去重＋toast）
+        if (AutoAddSettings.Enabled)
+        {
+            AddToNotesRequested?.Invoke(r);
         }
     }
 
