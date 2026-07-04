@@ -48,6 +48,9 @@ public partial class HistoryWindow : Window
     /// <summary>使用者對某筆按「檢視」時觸發；呼叫端開結果卡片顯示三欄詳情（重用結果視窗）。</summary>
     public event Action<HistoryEntry>? ViewRequested;
 
+    /// <summary>使用者對某筆按「＋筆記」時觸發；呼叫端去重加入我的筆記並 toast（spec#7）。</summary>
+    public event Action<HistoryEntry>? AddToNotesRequested;
+
     private sealed record DateGroup(DateTime Date, List<HistoryEntry> Entries);
 
     public HistoryWindow(HistoryStore store, Func<ISpeechService?> speechProvider)
@@ -151,10 +154,18 @@ public partial class HistoryWindow : Window
         };
 
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // ＋筆記
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });  // 文字
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 播音/檢視/刪除
 
-        // 左：英文原文（單行截斷）＋時間
+        // 前端：加入我的筆記（去重＋toast，spec#7）
+        var addNote = ActionButton("＋筆記", "加入我的筆記", "#2F6F4A", "#E9F6EE", "#C9E6D3",
+            () => AddToNotesRequested?.Invoke(entry));
+        addNote.Margin = new Thickness(0, 0, 8, 0);
+        Grid.SetColumn(addNote, 0);
+        grid.Children.Add(addNote);
+
+        // 中：英文原文（單行截斷）＋時間
         var textCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         textCol.Children.Add(new TextBlock
         {
@@ -170,7 +181,7 @@ public partial class HistoryWindow : Window
             Foreground = Brush("#8F8F8F"),
             Margin = new Thickness(0, 3, 0, 0),
         });
-        Grid.SetColumn(textCol, 0);
+        Grid.SetColumn(textCol, 1);
         grid.Children.Add(textCol);
 
         // 右：播音／檢視／刪除
@@ -186,7 +197,7 @@ public partial class HistoryWindow : Window
             () => ViewRequested?.Invoke(entry)));
         actions.Children.Add(ActionButton("刪除", "自歷史移除此筆", "#B23B3B", "#FDF2F2", "#F0D2D2",
             () => { _store.Delete(entry.Id); Reload(); }));
-        Grid.SetColumn(actions, 1);
+        Grid.SetColumn(actions, 2);
         grid.Children.Add(actions);
 
         card.Child = grid;

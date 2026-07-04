@@ -26,6 +26,8 @@ public partial class App : System.Windows.Application
     private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個（失焦不再自動關閉）
     private readonly HistoryStore _historyStore = new(); // 查詢歷史本機儲存（spec#6）
     private HistoryWindow? _history; // 查詢歷史視窗（獨立、單一實例、非結果視窗）
+    private readonly NotesStore _notesStore = new(); // 我的筆記本機儲存（spec#7）
+    private NotesWindow? _notes; // 我的筆記視窗（獨立、單一實例、非結果視窗）
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -67,6 +69,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("開啟主控頁", null, (_, _) => OpenDock());
         menu.Items.Add("查詢歷史…", null, (_, _) => OpenHistory());
+        menu.Items.Add("我的筆記…", null, (_, _) => OpenNotes());
         menu.Items.Add("設定…", null, OnSettings);
         menu.Items.Add("關於 ScreenTrans", null, (_, _) => ShowAbout());
         menu.Items.Add("結束", null, (_, _) => ExitApp());
@@ -81,6 +84,7 @@ public partial class App : System.Windows.Application
         _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
         _dock.ExitRequested += ExitApp;
         _dock.HistoryRequested += OpenHistory;
+        _dock.NotesRequested += OpenNotes;
         // 主控頁被帶到前景時（工作列按鈕／Alt+Tab／系統匣還原皆會 Activate）關閉 topmost 結果視窗，
         // 否則結果卡片會蓋住非 topmost 的主控頁，違反 spec#1「工作列可穩定尋得主控入口」。
         _dock.Activated += (_, _) => CloseResultBeforeMaintenanceUi();
@@ -165,10 +169,7 @@ public partial class App : System.Windows.Application
                 return; // 取消或空選（以 Result 判定，不靠 DialogResult）
             }
 
-            var win = new ResultWindow();
-            _result = win;
-            win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
-            win.HistoryRequested += OpenHistory;
+            var win = NewResultWindow();
             win.ShowLoading();
             win.Show();
             win.Activate();
@@ -223,6 +224,18 @@ public partial class App : System.Windows.Application
         _dock?.RestoreFromTray();
     }
 
+    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛歷史/筆記/收藏入口事件）。</summary>
+    private ResultWindow NewResultWindow()
+    {
+        var win = new ResultWindow();
+        _result = win;
+        win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
+        win.HistoryRequested += OpenHistory;
+        win.NotesRequested += OpenNotes;
+        win.AddToNotesRequested += AddToNotes;
+        return win;
+    }
+
     /// <summary>
     /// 開啟查詢歷史視窗（spec#6；結果視窗按鈕／常駐主控頁／系統匣皆可觸發）。
     /// 歷史為獨立視窗、單一實例；先關 topmost 結果卡片免遮蔽，再開啟或還原歷史視窗。
@@ -233,7 +246,8 @@ public partial class App : System.Windows.Application
         if (_history is null)
         {
             _history = new HistoryWindow(_historyStore, () => _speech);
-            _history.ViewRequested += ShowHistoryDetail;
+            _history.ViewRequested += e => ShowDetail(e.ToResult());
+            _history.AddToNotesRequested += e => AddToNotes(e.ToResult());
             _history.Closed += (_, _) => _history = null;
             _history.Show();
         }
@@ -249,16 +263,52 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>歷史「檢視」：以結果卡片顯示該筆三欄詳情（重用 ResultWindow 之整句/逐字發音組件）。</summary>
-    private void ShowHistoryDetail(HistoryEntry entry)
+    /// <summary>
+    /// 開啟我的筆記視窗（spec#7；結果視窗按鈕／歷史／常駐主控頁／系統匣皆可觸發）。
+    /// 筆記為獨立視窗、單一實例；先關 topmost 結果卡片免遮蔽。
+    /// </summary>
+    private void OpenNotes()
     {
-        var win = new ResultWindow();
-        _result = win;
-        win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
-        win.HistoryRequested += OpenHistory;
+        CloseResultBeforeMaintenanceUi();
+        if (_notes is null)
+        {
+            _notes = new NotesWindow(_notesStore, () => _speech);
+            _notes.ViewRequested += e => ShowDetail(e.ToResult());
+            _notes.Closed += (_, _) => _notes = null;
+            _notes.Show();
+        }
+        else
+        {
+            _notes.Reload();
+            if (_notes.WindowState == WindowState.Minimized)
+            {
+                _notes.WindowState = WindowState.Normal;
+            }
+            _notes.Show();
+            _notes.Activate();
+        }
+    }
+
+    /// <summary>加入我的筆記（去重）：由結果視窗或歷史條目觸發，右下角 toast 回饋（spec#7）。</summary>
+    private void AddToNotes(QueryResult r)
+    {
+        var msg = _notesStore.AddAndSave(r, DateTimeOffset.Now) switch
+        {
+            NoteAddResult.Added => "✓ 已加入我的筆記",
+            NoteAddResult.AlreadyExists => "已在筆記中",
+            _ => "無可收藏內容",
+        };
+        ToastNotifier.Show(msg);
+        _notes?.Reload(); // 筆記視窗開著則即時反映
+    }
+
+    /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）。</summary>
+    private void ShowDetail(QueryResult r)
+    {
+        var win = NewResultWindow();
         win.Show();
         win.Activate();
-        win.ShowResult(entry.ToResult(), _speech!);
+        win.ShowResult(r, _speech!);
     }
 
     /// <summary>系統匣「關於」：先關結果視窗（免遮蔽）再顯示說明。</summary>
