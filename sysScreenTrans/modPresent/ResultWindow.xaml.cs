@@ -33,9 +33,16 @@ public partial class ResultWindow : Window
     private ISpeechService? _speech;
     private bool _closing;
     private readonly UiStateStore _ui;
+    private QueryResult? _current; // 目前顯示中的結果（供「加入我的筆記」收藏）
 
     /// <summary>按「展示歷史紀錄」時觸發（呼叫端開查詢歷史視窗，spec#6）。</summary>
     public event Action? HistoryRequested;
+
+    /// <summary>按「展示我的筆記」時觸發（呼叫端開我的筆記視窗，spec#7）。</summary>
+    public event Action? NotesRequested;
+
+    /// <summary>按「加入我的筆記」時觸發（傳目前結果，呼叫端去重加入並 toast，spec#7）。</summary>
+    public event Action<QueryResult>? AddToNotesRequested;
 
     public ResultWindow()
     {
@@ -46,6 +53,14 @@ public partial class ResultWindow : Window
         ResizeGrip.DragDelta += OnResizeDelta;
         CloseBtn.Click += (_, _) => CloseOnce();
         HistoryBtn.Click += (_, _) => HistoryRequested?.Invoke();
+        NotesBtn.Click += (_, _) => NotesRequested?.Invoke();
+        AddNoteBtn.Click += (_, _) =>
+        {
+            if (_current is { IsEmpty: false } r)
+            {
+                AddToNotesRequested?.Invoke(r);
+            }
+        };
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
@@ -122,6 +137,7 @@ public partial class ResultWindow : Window
 
     public void ShowLoading()
     {
+        _current = null;
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
@@ -134,6 +150,7 @@ public partial class ResultWindow : Window
     public void ShowResult(QueryResult r, ISpeechService speech)
     {
         _speech = speech;
+        _current = r;
         BodyPanel.Children.Clear();
 
         if (r.IsEmpty)
@@ -179,6 +196,7 @@ public partial class ResultWindow : Window
 
     public void ShowError(string message)
     {
+        _current = null;
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {

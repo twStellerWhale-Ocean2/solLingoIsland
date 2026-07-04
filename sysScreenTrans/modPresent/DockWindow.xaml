@@ -1,7 +1,7 @@
 <Window x:Class="ScreenTrans.Present.DockWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ScreenTrans" Width="360" Height="264"
+        Title="ScreenTrans" Width="456" Height="264"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True" Background="#F4F6F9"
         Icon="pack://application:,,,/assets/app.ico">
@@ -27,6 +27,9 @@
     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,14">
       <Button x:Name="HistoryBtn" Content="查詢歷史" Width="96" Height="34"
               Background="#5A7FBF" Foreground="White" BorderThickness="0"
+              FontSize="13" FontWeight="SemiBold" Cursor="Hand"/>
+      <Button x:Name="NotesBtn" Content="我的筆記" Width="96" Height="34" Margin="8,0,0,0"
+              Background="#4A9A6A" Foreground="White" BorderThickness="0"
               FontSize="13" FontWeight="SemiBold" Cursor="Hand"/>
       <Button x:Name="SettingsBtn" Content="設定…" Width="84" Height="34" Margin="8,0,0,0"
               Background="#3F6FB0" Foreground="White" BorderThickness="0"

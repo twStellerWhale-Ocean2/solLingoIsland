@@ -5,6 +5,29 @@
         ShowInTaskbar="False" Topmost="True"
         Width="560" Height="380" MinWidth="320" MinHeight="200"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <Style x:Key="Pill" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="Margin" Value="6,0,0,0"/>
+      <Setter Property="Foreground" Value="#B0688A"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="#FBE4EC" Padding="9,3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#F4C2D0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <Border Background="#FFF0F5" CornerRadius="14" BorderBrush="#F4C2D0" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
@@ -43,24 +66,13 @@
         </Thumb.Template>
       </Thumb>
 
-      <!-- 展示歷史紀錄入口（spec#6）：開啟獨立查詢歷史視窗（不關閉本結果卡片由呼叫端決定） -->
-      <Button x:Name="HistoryBtn" Grid.Row="0"
-              HorizontalAlignment="Right" VerticalAlignment="Top"
-              Height="28" Margin="0,8,48,0" Cursor="Hand" ToolTip="展示查詢歷史紀錄">
-        <Button.Template>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="8" Background="#FBE4EC" Padding="9,3">
-              <TextBlock Text="🕘 歷史" FontSize="13" Foreground="#B0688A"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="#F4C2D0"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Button.Template>
-      </Button>
+      <!-- 入口按鈕（spec#6/#7）：加入我的筆記／展示我的筆記／展示歷史紀錄 -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,46,0">
+        <Button x:Name="AddNoteBtn" Style="{StaticResource Pill}" Content="＋ 筆記" ToolTip="加入我的筆記"/>
+        <Button x:Name="NotesBtn" Style="{StaticResource Pill}" Content="📒 我的筆記" ToolTip="展示我的筆記"/>
+        <Button x:Name="HistoryBtn" Style="{StaticResource Pill}" Content="🕘 歷史" ToolTip="展示查詢歷史紀錄"/>
+      </StackPanel>
 
       <!-- 右上角關閉鈕：置於 HeaderBar 之上、獨立命中，點擊不觸發拖曳 -->
       <Button x:Name="CloseBtn" Grid.Row="0"
