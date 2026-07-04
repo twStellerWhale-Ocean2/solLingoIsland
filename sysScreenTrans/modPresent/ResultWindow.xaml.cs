@@ -24,13 +24,13 @@ namespace ScreenTrans.Present;
 /// <summary>
 /// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
 /// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
-/// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。ESC 或點視窗外即關。
+/// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。
+/// 關閉改由明確操作觸發：ESC／關閉鈕／下一次查詢取代（失焦不自動關閉，切換視窗對照時結果保留）。
 /// 視窗可拖曳標題移動、右下握把縮放；關閉時記住位置與大小（UiStateStore），下次開啟還原。
 /// </summary>
 public partial class ResultWindow : Window
 {
     private ISpeechService? _speech;
-    private bool _isLoading;
     private bool _closing;
     private readonly UiStateStore _ui;
 
@@ -83,7 +83,7 @@ public partial class ResultWindow : Window
         Height = Math.Max(MinHeight, Height + e.VerticalChange);
     }
 
-    /// <summary>只關一次：避免關閉過程中 OnDeactivated／ESC 再次呼叫 Close（WPF 會擲「closing」例外）。</summary>
+    /// <summary>只關一次：避免關閉過程中 ESC／關閉鈕／取代流程重複呼叫 Close（WPF 會擲「closing」例外）。</summary>
     private void CloseOnce()
     {
         if (_closing)
@@ -118,7 +118,6 @@ public partial class ResultWindow : Window
 
     public void ShowLoading()
     {
-        _isLoading = true;
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
@@ -130,7 +129,6 @@ public partial class ResultWindow : Window
 
     public void ShowResult(QueryResult r, ISpeechService speech)
     {
-        _isLoading = false;
         _speech = speech;
         BodyPanel.Children.Clear();
 
@@ -177,7 +175,6 @@ public partial class ResultWindow : Window
 
     public void ShowError(string message)
     {
-        _isLoading = false;
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
@@ -318,15 +315,6 @@ public partial class ResultWindow : Window
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
-        {
-            CloseOnce();
-        }
-    }
-
-    protected override void OnDeactivated(EventArgs e)
-    {
-        base.OnDeactivated(e);
-        if (!_isLoading)
         {
             CloseOnce();
         }

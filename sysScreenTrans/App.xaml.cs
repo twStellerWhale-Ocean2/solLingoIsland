@@ -23,6 +23,7 @@ public partial class App : System.Windows.Application
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
+    private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個（失焦不再自動關閉）
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -156,7 +157,11 @@ public partial class App : System.Windows.Application
                 return; // 取消或空選（以 Result 判定，不靠 DialogResult）
             }
 
+            // 結果視窗失焦不再自動關閉，故新查詢須主動關閉取代前一個，避免浮窗堆疊（同時至多一個）。
+            _result?.Close();
             var win = new ResultWindow();
+            _result = win;
+            win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
             win.ShowLoading();
             win.Show();
             win.Activate();
