@@ -321,6 +321,52 @@ public class NotesStoreTests
     }
 
     [Fact]
+    public void SetEntryColor_FindsAcrossTree_ReplacesColor()
+    {
+        var d = new NotesData();
+        var a = NotesStore.AddFolder(d, "A");
+        var sub = NotesStore.AddSubFolder(d, a.Id, "sub")!;
+        var e = NoteEntry.From(new QueryResult("hello", "h", "哈囉"), DateTimeOffset.UtcNow);
+        sub.Entries.Add(e);
+
+        Assert.True(NotesStore.SetEntryColor(d, e.Id, "#E1EFFB"));
+        Assert.Equal("#E1EFFB", sub.Entries[0].Color);
+        Assert.Equal("hello", sub.Entries[0].Original); // 其餘欄位不動
+
+        Assert.True(NotesStore.SetEntryColor(d, e.Id, "")); // 清回預設
+        Assert.Equal("", sub.Entries[0].Color);
+
+        Assert.False(NotesStore.SetEntryColor(d, "no-such-id", "#FBE4EC")); // 未知 Id 無為
+    }
+
+    [Fact]
+    public void EntryColor_RoundTripsThroughJson_LegacyMissingFieldDefaultsEmpty()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            var d = new NotesData();
+            var f = NotesStore.AddFolder(d, "F");
+            var e = NoteEntry.From(new QueryResult("word", "w", "字"), DateTimeOffset.UtcNow);
+            f.Entries.Add(e);
+            NotesStore.SetEntryColor(d, e.Id, "#FBF3D9");
+            store.Save(d);
+
+            var loaded = store.Load();
+            Assert.Equal("#FBF3D9", loaded.Folders[0].Entries[0].Color); // 底色隨檔留存
+
+            // 舊檔（無 Color 欄）→ 預設空＝白
+            File.WriteAllText(path,
+                "{\"Folders\":[{\"Id\":\"f1\",\"Name\":\"F\",\"Entries\":[{\"Id\":\"e1\"," +
+                "\"AddedAt\":\"2026-07-04T00:00:00+00:00\",\"Original\":\"old\",\"Phonetic\":\"o\",\"Translation\":\"舊\"}]}]}");
+            var legacy = store.Load();
+            Assert.Equal("", legacy.Folders[0].Entries[0].Color);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Load_LegacyFlatJson_UpgradesToTree_NoDataLoss()
     {
         // 舊平面 notes.json（NoteFolder 無 Folders 子夾鍵）
