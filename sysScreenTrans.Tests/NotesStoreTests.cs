@@ -243,6 +243,35 @@ public class NotesStoreTests
     }
 
     [Fact]
+    public void NextNewFolderName_Unused_ReturnsBaseName()
+    {
+        var d = new NotesData();
+        NotesStore.AddFolder(d, "我的筆記");
+
+        Assert.Equal("新資料夾", NotesStore.NextNewFolderName(d));
+    }
+
+    [Fact]
+    public void NextNewFolderName_Taken_AppendsOrdinal_TreeWide()
+    {
+        var d = new NotesData();
+        var a = NotesStore.AddFolder(d, "新資料夾");
+        NotesStore.AddSubFolder(d, a.Id, "新資料夾 (2)"); // 占用在子層也算（全樹唯一）
+
+        Assert.Equal("新資料夾 (3)", NotesStore.NextNewFolderName(d));
+    }
+
+    [Fact]
+    public void NextNewFolderName_GapInOrdinals_TakesFirstFree()
+    {
+        var d = new NotesData();
+        NotesStore.AddFolder(d, "新資料夾");
+        NotesStore.AddFolder(d, "新資料夾 (3)"); // (2) 空缺 → 先補 (2)
+
+        Assert.Equal("新資料夾 (2)", NotesStore.NextNewFolderName(d));
+    }
+
+    [Fact]
     public void Load_LegacyFlatJson_UpgradesToTree_NoDataLoss()
     {
         // 舊平面 notes.json（NoteFolder 無 Folders 子夾鍵）

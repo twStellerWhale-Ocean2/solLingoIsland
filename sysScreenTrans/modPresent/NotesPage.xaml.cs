@@ -5,7 +5,11 @@ using TreeView = System.Windows.Controls.TreeView;
 using TreeViewItem = System.Windows.Controls.TreeViewItem;
 using StackPanel = System.Windows.Controls.StackPanel;
 using TextBlock = System.Windows.Controls.TextBlock;
+using TextBox = System.Windows.Controls.TextBox;
 using Border = System.Windows.Controls.Border;
+using ContextMenu = System.Windows.Controls.ContextMenu;
+using MenuItem = System.Windows.Controls.MenuItem;
+using Separator = System.Windows.Controls.Separator;
 using Orientation = System.Windows.Controls.Orientation;
 using Grid = System.Windows.Controls.Grid;
 using ColumnDefinition = System.Windows.Controls.ColumnDefinition;
@@ -14,7 +18,6 @@ using GridUnitType = System.Windows.GridUnitType;
 using Thickness = System.Windows.Thickness;
 using CornerRadius = System.Windows.CornerRadius;
 using Visibility = System.Windows.Visibility;
-using RoutedEventArgs = System.Windows.RoutedEventArgs;
 using RoutedPropertyChangedEventArgs = System.Windows.RoutedPropertyChangedEventArgs<object>;
 using TextTrimming = System.Windows.TextTrimming;
 using VerticalAlignment = System.Windows.VerticalAlignment;
@@ -25,6 +28,8 @@ using DataObject = System.Windows.DataObject;
 using DragDrop = System.Windows.DragDrop;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DragEventArgs = System.Windows.DragEventArgs;
+using Key = System.Windows.Input.Key;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using MouseButtonState = System.Windows.Input.MouseButtonState;
@@ -33,16 +38,23 @@ using MessageBox = System.Windows.MessageBox;
 using MessageBoxButton = System.Windows.MessageBoxButton;
 using MessageBoxResult = System.Windows.MessageBoxResult;
 using MessageBoxImage = System.Windows.MessageBoxImage;
+using Adorner = System.Windows.Documents.Adorner;
+using AdornerLayer = System.Windows.Documents.AdornerLayer;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
+using DrawingContext = System.Windows.Media.DrawingContext;
+using FontFamily = System.Windows.Media.FontFamily;
+using Pen = System.Windows.Media.Pen;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
+using Brushes = System.Windows.Media.Brushes;
 
 namespace ScreenTrans.Present;
 
 /// <summary>
-/// 我的筆記分頁（Issue #34）：左側**多層資料夾樹**（標準 <see cref="TreeView"/>，可新增子夾／更名／刪除、
-/// 拖曳移動節點如檔案總管、防成環由 <see cref="NotesStore"/> 保證）、右側選取夾之條目（拖曳排序、播音／檢視／刪除）。
-/// 每次變更即落地 notes.json；語音以 provider 委派取用。
+/// 我的筆記分頁（Issue #34／#38 Windows 慣例收斂）：左側**多層資料夾樹如檔案總管**——頂部工具列僅
+/// [建立資料夾]（建立即進原地更名）、標準樹節點＋右鍵選單（新增子資料夾／更名 `F2` 原地編輯／刪除 `Del`）、
+/// 拖曳移動節點（目標夾高亮、防成環由 <see cref="NotesStore"/> 保證）；右側選取夾之條目拖曳排序
+/// （**插入位置指示線**即時回饋）、播音／檢視／刪除。每次變更即落地 notes.json；語音以 provider 委派取用。
 /// </summary>
 public partial class NotesPage : UserControl
 {
@@ -59,6 +71,8 @@ public partial class NotesPage : UserControl
     private Point _pressPoint;
     private NoteEntry? _entryDrag;
     private Point _entryStart;
+    private TreeViewItem? _dropHighlight;   // 目前拖曳滑過之目標夾（高亮回饋，Issue #38）
+    private InsertionAdorner? _insertLine;  // 條目拖曳之插入位置指示線（Issue #38）
 
     public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider)
     {
@@ -67,13 +81,17 @@ public partial class NotesPage : UserControl
         _speech = speechProvider;
         _data = _store.LoadEnsured();
 
-        AddBtn.Click += (_, _) => OnAddFolder(sub: false);
-        AddSubBtn.Click += (_, _) => OnAddFolder(sub: true);
-        RenameBtn.Click += OnRename;
-        DeleteBtn.Click += OnDelete;
+        NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
         FolderTree.SelectedItemChanged += OnFolderSelected;
-        FolderTree.Drop += OnTreeBackgroundDrop;    // 拖到空白處 → 移到頂層
+        FolderTree.KeyDown += OnTreeKeyDown;                // F2＝更名、Del＝刪除（檔案總管慣例）
+        FolderTree.Drop += OnTreeBackgroundDrop;            // 拖到空白處 → 移到頂層
         FolderTree.DragOver += (_, e) => { e.Effects = DragDropEffects.Move; e.Handled = true; };
+        FolderTree.DragLeave += (_, _) => SetDropHighlight(null);
+
+        EntryPanel.AllowDrop = true;
+        EntryPanel.DragOver += OnEntryAreaDragOver;
+        EntryPanel.DragLeave += (_, _) => HideInsertLine();
+        EntryPanel.Drop += OnEntryAreaDrop;
 
         BuildTree();
     }
@@ -91,6 +109,7 @@ public partial class NotesPage : UserControl
     private void BuildTree()
     {
         var keepId = Selected?.Id;
+        _dropHighlight = null;
         FolderTree.Items.Clear();
         foreach (var f in _data.Folders)
         {
@@ -105,20 +124,73 @@ public partial class NotesPage : UserControl
     {
         var item = new TreeViewItem
         {
-            Header = $"📁 {f.Name}　{f.Entries.Count}",
+            Header = MakeHeader(f),
             Tag = f,
             IsExpanded = true,
             AllowDrop = true,
         };
         item.PreviewMouseLeftButtonDown += OnItemMouseDown;
+        item.PreviewMouseRightButtonDown += (s, _) => ((TreeViewItem)s).IsSelected = true; // 右鍵先選取（檔案總管慣例）
         item.PreviewMouseMove += OnItemMouseMove;
         item.Drop += OnItemDrop;
-        item.DragOver += (_, e) => { e.Effects = DragDropEffects.Move; e.Handled = true; };
+        item.DragOver += (s, e) =>
+        {
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            SetDropHighlight(s as TreeViewItem); // 目標夾高亮（拖曳回饋）
+        };
+        item.DragLeave += (s, _) =>
+        {
+            if (ReferenceEquals(_dropHighlight, s))
+            {
+                SetDropHighlight(null);
+            }
+        };
+        item.ContextMenu = MakeMenu(item, f);
         foreach (var sub in f.Folders)
         {
             item.Items.Add(MakeItem(sub));
         }
         return item;
+    }
+
+    private StackPanel MakeHeader(NoteFolder f)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        sp.Children.Add(new TextBlock
+        {
+            Text = "", // Segoe MDL2 Assets：FolderHorizontal（檔案總管閉合資料夾）
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            Foreground = Brush("#C77D9A"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0),
+        });
+        sp.Children.Add(new TextBlock { Text = f.Name, FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        sp.Children.Add(new TextBlock
+        {
+            Text = "　" + f.Entries.Count,
+            FontSize = 11.5,
+            Foreground = Brush("#8A5A6D"),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return sp;
+    }
+
+    private ContextMenu MakeMenu(TreeViewItem item, NoteFolder f)
+    {
+        var menu = new ContextMenu();
+        var addSub = new MenuItem { Header = "新增子資料夾" };
+        addSub.Click += (_, _) => CreateFolder(f);
+        var rename = new MenuItem { Header = "更名", InputGestureText = "F2" };
+        rename.Click += (_, _) => BeginRename(item);
+        var delete = new MenuItem { Header = "刪除", InputGestureText = "Del", Foreground = Brush("#B23B3B") };
+        delete.Click += (_, _) => DeleteFolder(f);
+        menu.Items.Add(addSub);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(rename);
+        menu.Items.Add(delete);
+        return menu;
     }
 
     private TreeViewItem? FirstItem() => FolderTree.Items.Count > 0 ? (TreeViewItem)FolderTree.Items[0]! : null;
@@ -160,49 +232,86 @@ public partial class NotesPage : UserControl
 
     private void Persist() { _store.Save(_data); BuildTree(); }
 
-    // ---- 資料夾操作 ----
+    // ---- 資料夾操作（頂部[建立資料夾]＋右鍵選單／F2／Del，原地更名如檔案總管） ----
 
-    private void OnAddFolder(bool sub)
+    private void CreateFolder(NoteFolder? parent)
     {
-        var name = Microsoft.VisualBasic.Interaction.InputBox(sub ? "子資料夾名稱：" : "資料夾名稱：",
-            sub ? "新增子資料夾" : "新增資料夾", "新資料夾");
-        if (string.IsNullOrWhiteSpace(name))
+        var name = NotesStore.NextNewFolderName(_data);
+        var created = parent is null
+            ? NotesStore.AddFolder(_data, name)
+            : NotesStore.AddSubFolder(_data, parent.Id, name);
+        if (created is null)
         {
             return;
         }
-        NoteFolder? created;
-        if (sub)
-        {
-            var parent = Selected;
-            if (parent is null) { return; }
-            created = NotesStore.AddSubFolder(_data, parent.Id, name);
-        }
-        else
-        {
-            created = NotesStore.AddFolder(_data, name);
-        }
         _store.Save(_data);
         BuildTree();
-        if (created is not null)
+        var item = FindItem(FolderTree.Items, created.Id);
+        if (item is not null)
         {
-            FindItem(FolderTree.Items, created.Id)?.SetValue(TreeViewItem.IsSelectedProperty, true);
+            item.IsSelected = true;
+            item.BringIntoView();
+            BeginRename(item); // 建立即進原地更名（檔案總管慣例）
         }
     }
 
-    private void OnRename(object? sender, RoutedEventArgs e)
+    /// <summary>原地更名：以 TextBox 就地編輯，Enter／失焦＝確認、Esc＝取消。</summary>
+    private void BeginRename(TreeViewItem? item)
     {
-        var f = Selected;
-        if (f is null) { return; }
-        var name = Microsoft.VisualBasic.Interaction.InputBox("新名稱：", "更名資料夾", f.Name);
-        if (string.IsNullOrWhiteSpace(name)) { return; }
-        NotesStore.RenameFolder(_data, f.Id, name);
-        Persist();
+        if (item?.Tag is not NoteFolder f)
+        {
+            return;
+        }
+        var box = new TextBox { Text = f.Name, MinWidth = 110, FontSize = 13, Padding = new Thickness(2, 0, 2, 0) };
+        var done = false;
+        void Commit(bool save)
+        {
+            if (done)
+            {
+                return;
+            }
+            done = true;
+            if (save && !string.IsNullOrWhiteSpace(box.Text) && box.Text.Trim() != f.Name)
+            {
+                NotesStore.RenameFolder(_data, f.Id, box.Text);
+                _store.Save(_data);
+            }
+            BuildTree(); // 取消或未變更亦重建，還原一般節點頭
+        }
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Commit(save: true);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                Commit(save: false);
+                e.Handled = true;
+            }
+        };
+        box.LostFocus += (_, _) => Commit(save: true);
+        item.Header = box;
+        item.Dispatcher.BeginInvoke(new Action(() => { box.Focus(); box.SelectAll(); }));
     }
 
-    private void OnDelete(object? sender, RoutedEventArgs e)
+    private void OnTreeKeyDown(object sender, KeyEventArgs e)
     {
-        var f = Selected;
-        if (f is null) { return; }
+        if (e.Key == Key.F2)
+        {
+            BeginRename(FolderTree.SelectedItem as TreeViewItem);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && Selected is { } f)
+        {
+            DeleteFolder(f);
+            e.Handled = true;
+        }
+    }
+
+    private void DeleteFolder(NoteFolder f)
+    {
         var msg = (f.Entries.Count > 0 || f.Folders.Count > 0)
             ? $"刪除資料夾「{f.Name}」及其子夾與 {f.Entries.Count} 筆筆記？此動作無法復原。"
             : $"刪除資料夾「{f.Name}」？";
@@ -214,7 +323,24 @@ public partial class NotesPage : UserControl
         Persist();
     }
 
-    // ---- 資料夾/條目拖曳移動（節點移動如檔案總管；防環由 store） ----
+    // ---- 資料夾/條目拖曳移動（節點移動如檔案總管；防環由 store；目標夾高亮回饋） ----
+
+    private void SetDropHighlight(TreeViewItem? item)
+    {
+        if (ReferenceEquals(_dropHighlight, item))
+        {
+            return;
+        }
+        if (_dropHighlight is not null)
+        {
+            _dropHighlight.Background = Brushes.Transparent;
+        }
+        _dropHighlight = item;
+        if (item is not null)
+        {
+            item.Background = Brush("#F4C2D0");
+        }
+    }
 
     private void OnItemMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -238,11 +364,13 @@ public partial class NotesPage : UserControl
             var moving = _pressItem;
             _pressItem = null;
             DragDrop.DoDragDrop(moving, new DataObject(FmtFolder, f.Id), DragDropEffects.Move);
+            SetDropHighlight(null); // 拖曳結束（含取消）清除高亮
         }
     }
 
     private void OnItemDrop(object sender, DragEventArgs e)
     {
+        SetDropHighlight(null);
         if ((sender as TreeViewItem)?.Tag is not NoteFolder target)
         {
             return;
@@ -262,6 +390,7 @@ public partial class NotesPage : UserControl
 
     private void OnTreeBackgroundDrop(object? sender, DragEventArgs e)
     {
+        SetDropHighlight(null);
         if (e.Handled)
         {
             return; // 已由某節點處理
@@ -273,7 +402,7 @@ public partial class NotesPage : UserControl
         }
     }
 
-    // ---- 條目版型與排序 ----
+    // ---- 條目版型與排序（拖曳中顯示插入位置指示線，Issue #38） ----
 
     private UIElement EntryRow(NoteEntry entry)
     {
@@ -285,10 +414,8 @@ public partial class NotesPage : UserControl
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(8, 10, 10, 10),
             Margin = new Thickness(0, 0, 0, 8),
-            AllowDrop = true,
+            AllowDrop = true, // 事件交由 EntryPanel 統一處理（冒泡），卡片僅作為有效放置目標
         };
-        card.Drop += OnEntryPanelDrop;
-        card.DragOver += (_, e) => { e.Effects = DragDropEffects.Move; e.Handled = true; };
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -350,11 +477,27 @@ public partial class NotesPage : UserControl
         var moving = _entryDrag;
         _entryDrag = null;
         DragDrop.DoDragDrop(EntryPanel, new DataObject(FmtEntry, moving.Id), DragDropEffects.Move);
+        HideInsertLine(); // 拖曳結束（含取消／落在樹側）清除指示線
     }
 
-    // 條目落在另一條目上 → 同夾排序（落點在該列之前/後由 Y 中線判定）
-    private void OnEntryPanelDrop(object sender, DragEventArgs e)
+    /// <summary>條目拖曳滑過右側清單 → 於預定落點顯示插入位置指示線（標準拖放回饋）。</summary>
+    private void OnEntryAreaDragOver(object sender, DragEventArgs e)
     {
+        if (!e.Data.GetDataPresent(FmtEntry))
+        {
+            e.Effects = DragDropEffects.None; // 資料夾拖入右側無意義 → 標準「不可放置」回饋
+            e.Handled = true;
+            return;
+        }
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+        ShowInsertLine(SlotIndex(e.GetPosition(EntryPanel).Y));
+    }
+
+    // 條目落下 → 同夾排序（插入槽位所見即所得；來自他夾之條目交由左側資料夾 drop 處理移動）
+    private void OnEntryAreaDrop(object sender, DragEventArgs e)
+    {
+        HideInsertLine();
         var f = Selected;
         if (f is null || !e.Data.GetDataPresent(FmtEntry) || e.Data.GetData(FmtEntry) is not string eid)
         {
@@ -363,16 +506,18 @@ public partial class NotesPage : UserControl
         int from = f.Entries.FindIndex(x => x.Id == eid);
         if (from < 0)
         {
-            return; // 來自他夾之條目落在此清單 → 交由資料夾 drop 處理移動，此處不排序
+            return;
         }
-        int to = TargetIndex(e.GetPosition(EntryPanel).Y);
+        int slot = SlotIndex(e.GetPosition(EntryPanel).Y);
+        int to = slot > from ? slot - 1 : slot; // 插入槽位 → 最終索引（移除自身後前移一位）
         NotesStore.Reorder(f, from, to);
         _store.Save(_data);
         RenderFolder();
         e.Handled = true;
     }
 
-    private int TargetIndex(double y)
+    /// <summary>以 Y 座標求插入槽位（0..Count）：每列以中線分上下半。</summary>
+    private int SlotIndex(double y)
     {
         for (int i = 0; i < EntryPanel.Children.Count; i++)
         {
@@ -383,7 +528,78 @@ public partial class NotesPage : UserControl
                 return i;
             }
         }
-        return Math.Max(0, EntryPanel.Children.Count - 1);
+        return EntryPanel.Children.Count;
+    }
+
+    private void ShowInsertLine(int slot)
+    {
+        if (_insertLine is null)
+        {
+            var layer = AdornerLayer.GetAdornerLayer(EntryPanel);
+            if (layer is null)
+            {
+                return;
+            }
+            _insertLine = new InsertionAdorner(EntryPanel);
+            layer.Add(_insertLine);
+        }
+        double y = 2;
+        int n = EntryPanel.Children.Count;
+        if (n > 0)
+        {
+            if (slot < n)
+            {
+                var c = (FrameworkElement)EntryPanel.Children[slot];
+                y = c.TranslatePoint(new Point(0, 0), EntryPanel).Y - 4; // 落點列上緣（含列距中線）
+            }
+            else
+            {
+                var last = (FrameworkElement)EntryPanel.Children[n - 1];
+                y = last.TranslatePoint(new Point(0, 0), EntryPanel).Y + last.ActualHeight + 4;
+            }
+        }
+        _insertLine.SetY(y);
+    }
+
+    private void HideInsertLine()
+    {
+        if (_insertLine is not null)
+        {
+            AdornerLayer.GetAdornerLayer(EntryPanel)?.Remove(_insertLine);
+            _insertLine = null;
+        }
+    }
+
+    /// <summary>插入位置指示線（WPF 標準拖放回饋模式：Adorner 疊加水平線＋左端圓點）。</summary>
+    private sealed class InsertionAdorner : Adorner
+    {
+        private static readonly SolidColorBrush LineBrush = new(Color.FromRgb(0x2F, 0x6F, 0xED));
+        private static readonly Pen LinePen = new(LineBrush, 2.5);
+        private double _y;
+
+        static InsertionAdorner()
+        {
+            LineBrush.Freeze();
+            LinePen.Freeze();
+        }
+
+        public InsertionAdorner(UIElement adorned) : base(adorned) => IsHitTestVisible = false;
+
+        public void SetY(double y)
+        {
+            if (Math.Abs(_y - y) > 0.5)
+            {
+                _y = y;
+                InvalidateVisual();
+            }
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            var width = ((FrameworkElement)AdornedElement).ActualWidth;
+            dc.DrawEllipse(LineBrush, null, new Point(3, _y), 3.5, 3.5);
+            dc.DrawLine(LinePen, new Point(6, _y), new Point(width, _y));
+        }
     }
 
     private static Button ActionButton(string content, string tip, string fg, string bg, string border, Action onClick)

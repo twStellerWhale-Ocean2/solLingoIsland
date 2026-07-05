@@ -53,9 +53,13 @@ public partial class MainWindow : Window
         RestoreFromTray();
     }
 
-    /// <summary>更新金鑰狀態與快捷鍵顯示（啟動與設定變更後呼叫）。</summary>
-    public void RefreshStatus(bool keyReady, string hotkeyDisplay) =>
-        StatusText.Text = AppStatusText.KeyStatus(keyReady) + "　" + AppStatusText.HotkeyLine(hotkeyDisplay);
+    /// <summary>更新底部狀態列之金鑰狀態與快捷鍵顯示（啟動與設定變更後呼叫；Issue #38 狀態置底）。</summary>
+    public void RefreshStatus(bool keyReady, string hotkeyDisplay)
+    {
+        KeyStatusText.Text = AppStatusText.KeyStatus(keyReady);
+        KeyStatusText.Foreground = keyReady ? System.Windows.Media.Brushes.ForestGreen : System.Windows.Media.Brushes.Firebrick;
+        HotkeyText.Text = AppStatusText.HotkeyLine(hotkeyDisplay);
+    }
 
     /// <summary>從收合狀態還原並帶到前景。</summary>
     public void RestoreFromTray()

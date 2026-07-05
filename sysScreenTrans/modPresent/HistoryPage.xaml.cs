@@ -123,6 +123,7 @@ public partial class HistoryPage : UserControl
         return sp;
     }
 
+    // 緊湊列（Issue #38）：單行原文＋時刻併列、低 padding，同容量顯示更多筆。
     private UIElement EntryRow(HistoryEntry entry)
     {
         var card = new Border
@@ -130,13 +131,14 @@ public partial class HistoryPage : UserControl
             Background = Brush("#FFFFFF"),
             BorderBrush = Brush("#F4C2D0"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(8, 10, 10, 10),
-            Margin = new Thickness(0, 0, 0, 8),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(8, 4, 8, 4),
+            Margin = new Thickness(0, 0, 0, 5),
         };
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var addNote = ActionButton("＋筆記", "加入我的筆記", "#2F6F4A", "#E9F6EE", "#C9E6D3",
@@ -145,23 +147,27 @@ public partial class HistoryPage : UserControl
         Grid.SetColumn(addNote, 0);
         grid.Children.Add(addNote);
 
-        var textCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        textCol.Children.Add(new TextBlock
+        var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "（未偵測到英文文字）" : entry.Original,
-            FontSize = 14,
+            FontSize = 13.5,
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        textCol.Children.Add(new TextBlock
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        var time = new TextBlock
         {
             Text = entry.Timestamp.ToLocalTime().ToString("HH:mm"),
-            FontSize = 11.5,
+            FontSize = 11,
             Foreground = Brush("#9A6A82"),
-            Margin = new Thickness(0, 3, 0, 0),
-        });
-        Grid.SetColumn(textCol, 1);
-        grid.Children.Add(textCol);
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+        };
+        Grid.SetColumn(time, 2);
+        grid.Children.Add(time);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
         actions.Children.Add(ActionButton("▶", "播音（英文原句）", "#2F6FED", "#F0F6FF", "#CFE0FB",
@@ -170,7 +176,7 @@ public partial class HistoryPage : UserControl
             () => ViewRequested?.Invoke(entry)));
         actions.Children.Add(ActionButton("刪除", "自歷史移除此筆", "#B23B3B", "#FDF2F2", "#F0D2D2",
             () => { _store.Delete(entry.Id); Reload(); }));
-        Grid.SetColumn(actions, 2);
+        Grid.SetColumn(actions, 3);
         grid.Children.Add(actions);
 
         card.Child = grid;
@@ -187,9 +193,9 @@ public partial class HistoryPage : UserControl
             Background = Brush(bg),
             BorderBrush = Brush(border),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 4, 10, 4),
+            Padding = new Thickness(9, 2, 9, 2),
             Margin = new Thickness(6, 0, 0, 0),
-            FontSize = 12.5,
+            FontSize = 12,
             Cursor = Cursors.Hand,
         };
         btn.Click += (_, _) => onClick();
