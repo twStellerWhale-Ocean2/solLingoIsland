@@ -79,11 +79,11 @@ public class ContextStoreTests
             var store = new ContextStore(path);
             var d = new ContextsData();
             var a = ContextStore.Add(d, "A"); // 首則使用中
-            a.ColorRules["粉紫"] = "boss";
+            a.ColorRules["淺灰"] = "boss";
             var b = ContextStore.Add(d, "B");
             b.ColorRules["粉紅"] = "小兵";
             store.Save(d);
-            Assert.Equal("粉紫＝「boss」", store.ActiveColorRules()); // A 使用中
+            Assert.Equal("淺灰＝「boss」", store.ActiveColorRules()); // A 使用中
         }
         finally { File.Delete(path); }
     }

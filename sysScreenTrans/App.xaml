@@ -8,10 +8,10 @@
     <SolidColorBrush x:Key="PinkAccent" Color="#F4C2D0"/>
     <SolidColorBrush x:Key="PinkText" Color="#6D3A4D"/>
     <SolidColorBrush x:Key="PinkSub" Color="#8A5A6D"/>
-    <!-- 卡片半透明白（Issue #71→#73：白色 30%，讓底層小女孩浮水印明顯透出） -->
-    <SolidColorBrush x:Key="CardBg" Color="#4DFFFFFF"/>
-    <!-- 白色控制項統一半透明白（30%），供輸入框等套用（Issue #73） -->
-    <SolidColorBrush x:Key="ControlWhite" Color="#4DFFFFFF"/>
+    <!-- 卡片半透明白（Issue #71→#73→#75：白色 40%，讓底層小女孩浮水印明顯透出） -->
+    <SolidColorBrush x:Key="CardBg" Color="#66FFFFFF"/>
+    <!-- 白色控制項統一半透明白（40%），供輸入框等套用（Issue #73／#75） -->
+    <SolidColorBrush x:Key="ControlWhite" Color="#66FFFFFF"/>
 
     <!-- 卡片外框（半透明白，讓底層粉底/logo 透出些許） -->
     <Style x:Key="Card" TargetType="Border">
@@ -45,7 +45,7 @@
       </Setter>
     </Style>
 
-    <!-- 白色輸入控制項統一半透明白 30%（Issue #73）：文字/密碼/下拉框底色透出浮水印；深字對比仍足 -->
+    <!-- 白色輸入控制項統一半透明白 40%（Issue #73／#75）：文字/密碼/下拉框底色透出浮水印；深字對比仍足 -->
     <Style TargetType="TextBox">
       <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
     </Style>
@@ -89,7 +89,7 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="8" Background="#4DFFFFFF"
+            <Border x:Name="bg" CornerRadius="8" Background="#66FFFFFF"
                     BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="12,5">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
