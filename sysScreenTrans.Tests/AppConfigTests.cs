@@ -127,6 +127,33 @@ public class AppConfigTests
     }
 
     [Fact]
+    public void SaveLoad_Roundtrips_HotkeyPoint()
+    {
+        // 直接點選擷取快捷鍵綁定往返（Issue #86）
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+Q", 200, "", "Ctrl+Shift+A").Save(path);
+            Assert.Contains("paramHotkeyPoint", File.ReadAllText(path));
+            Assert.Equal("Ctrl+Shift+A", AppConfig.Load(path).HotkeyPoint);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_MissingHotkeyPoint_DefaultsToAltA()
+    {
+        // 舊 appsettings 無 paramHotkeyPoint → 預設 Alt+A（向後相容，Issue #86）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal("Alt+A", AppConfig.Load(path).HotkeyPoint);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Save_Writes_HotkeyKey()
     {
         var path = TempPath();

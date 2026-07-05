@@ -25,6 +25,7 @@ public partial class App : System.Windows.Application
     private ContextPage? _contextPage;
     private OptionsPage? _optionsPage;
     private HotKeyService? _hotkey;
+    private HotKeyService? _hotkeyPoint; // 直接點選擷取熱鍵（Issue #86）
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
@@ -95,7 +96,7 @@ public partial class App : System.Windows.Application
         _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => _main?.ShowUpdateReady(v));
 
         _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
-        _main.RefreshStatus(keyReady, HotkeyDisplay());
+        _main.RefreshStatus(keyReady, HotkeyDisplayCombined());
         // 主視窗被帶到前景時關 topmost 結果卡片（否則會蓋住主視窗）
         _main.Activated += (_, _) => CloseResult();
         _main.WindowState = WindowState.Minimized;
@@ -103,6 +104,8 @@ public partial class App : System.Windows.Application
 
         _hotkey = new HotKeyService();
         _hotkey.HotKeyPressed += OnHotKey;
+        _hotkeyPoint = new HotKeyService();
+        _hotkeyPoint.HotKeyPressed += OnPointHotKey;
         RegisterHotkeyOrWarn();
 
         // 啟動即背景檢查更新（Issue #51）：靜默下載、就緒才提示；未安裝形態/失敗皆靜默跳過
@@ -118,21 +121,31 @@ public partial class App : System.Windows.Application
 
     private void RegisterHotkeyOrWarn()
     {
-        if (_hotkey is null)
+        var failed = new List<string>();
+        if (_hotkey is not null && !_hotkey.Register(HotKeyBinding.Parse(_config.Hotkey)))
         {
-            return;
+            failed.Add(HotkeyDisplay());
         }
-        if (!_hotkey.Register(HotKeyBinding.Parse(_config.Hotkey)))
+        if (_hotkeyPoint is not null && !_hotkeyPoint.Register(HotKeyBinding.Parse(_config.HotkeyPoint)))
+        {
+            failed.Add(HotkeyPointDisplay());
+        }
+        if (failed.Count > 0)
         {
             System.Windows.MessageBox.Show(
-                $"Failed to register hotkey “{HotkeyDisplay()}” (it may be in use by another app). ScreenTrans keeps running; you can change the hotkey in Options.",
+                $"Failed to register hotkey(s) “{string.Join("”, “", failed)}” (they may be in use by another app). ScreenTrans keeps running; you can change the hotkeys in Options.",
                 "ScreenTrans");
         }
     }
 
     private string HotkeyDisplay() => HotKeyBinding.Parse(_config.Hotkey).DisplayName;
 
-    private string TrayText() => AppStatusText.TrayTip(HotkeyDisplay());
+    private string HotkeyPointDisplay() => HotKeyBinding.Parse(_config.HotkeyPoint).DisplayName;
+
+    /// <summary>狀態列／tray 顯示兩熱鍵（喚起遮罩鍵＋直接點選鍵，Issue #86）。</summary>
+    private string HotkeyDisplayCombined() => $"{HotkeyDisplay()} / {HotkeyPointDisplay()} (point)";
+
+    private string TrayText() => AppStatusText.TrayTip(HotkeyDisplayCombined());
 
     private static Icon LoadAppIcon(System.Drawing.Size size)
     {
@@ -158,7 +171,7 @@ public partial class App : System.Windows.Application
         args.Handled = true;
     }
 
-    /// <summary>喚起：遮罩選區截圖 → vision 查詢 → 結果視窗＋朗讀＋歷史留存。</summary>
+    /// <summary>喚起（第一熱鍵）：遮罩選區/雙擊點選截圖 → vision 查詢 → 結果視窗＋朗讀＋歷史留存。</summary>
     private async void OnHotKey()
     {
         if (_busy)
@@ -176,36 +189,7 @@ public partial class App : System.Windows.Application
             {
                 return;
             }
-
-            var win = NewResultWindow();
-            win.ShowLoading();
-            win.Show();
-            win.Activate();
-
-            try
-            {
-                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
-                    _contextStore.ActiveText(), _contextStore.ActiveColorRules()); // 配色規則＝使用中情境各色描述（#69）
-                var result = await query.QueryAsync(mask.Result.PngBytes, mask.Result.IsPointMode); // #54 雙擊自動判斷
-                if (!result.IsEmpty)
-                {
-                    _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);
-                    _historyPage?.Reload();
-                }
-                if (!ReferenceEquals(_result, win))
-                {
-                    return;
-                }
-                win.ShowResult(result, _speech!);
-            }
-            catch (QueryException ex)
-            {
-                if (!ReferenceEquals(_result, win))
-                {
-                    return;
-                }
-                win.ShowError(ex.Message);
-            }
+            await RunQueryAsync(mask.Result);
         }
         catch (Exception ex)
         {
@@ -214,6 +198,71 @@ public partial class App : System.Windows.Application
         finally
         {
             _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// 直接點選擷取（第二熱鍵，Issue #86）：不開遮罩、不需雙擊——按下即截整個虛擬桌面、於目前游標處畫紅標，
+    /// 交 vision 判斷該處那句英文（pointMode）。避免遊戲畫面雙擊誤觸遊戲動作。
+    /// </summary>
+    private async void OnPointHotKey()
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            CloseResult();
+            var capture = ScreenCapture.CaptureAtCursor();
+            if (capture is null)
+            {
+                return;
+            }
+            await RunQueryAsync(capture);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show("Lookup error:\n" + ex.Message, "ScreenTrans");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>查詢主動線（兩熱鍵共用）：結果視窗 loading → vision 查詢（依 <c>IsPointMode</c>）→ 結果/錯誤＋歷史留存。</summary>
+    private async Task RunQueryAsync(CaptureResult capture)
+    {
+        var win = NewResultWindow();
+        win.ShowLoading();
+        win.Show();
+        win.Activate();
+
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
+                _contextStore.ActiveText(), _contextStore.ActiveColorRules()); // 配色規則＝使用中情境各色描述（#69）
+            var result = await query.QueryAsync(capture.PngBytes, capture.IsPointMode); // #54/#86 點選自動判斷
+            if (!result.IsEmpty)
+            {
+                _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);
+                _historyPage?.Reload();
+            }
+            if (!ReferenceEquals(_result, win))
+            {
+                return;
+            }
+            win.ShowResult(result, _speech!);
+        }
+        catch (QueryException ex)
+        {
+            if (!ReferenceEquals(_result, win))
+            {
+                return;
+            }
+            win.ShowError(ex.Message);
         }
     }
 
@@ -295,7 +344,7 @@ public partial class App : System.Windows.Application
         {
             _keyStatusItem.Text = AppStatusText.KeyStatus(keyReady);
         }
-        _main?.RefreshStatus(keyReady, HotkeyDisplay());
+        _main?.RefreshStatus(keyReady, HotkeyDisplayCombined());
     }
 
     /// <summary>
@@ -323,6 +372,7 @@ public partial class App : System.Windows.Application
         _updates?.ApplyOnExit(); // 新版已就緒者結束時掛起套用（下次啟動即新版；無則 no-op）
         _main?.AllowClose();
         _hotkey?.Dispose();
+        _hotkeyPoint?.Dispose();
         (_speech as IDisposable)?.Dispose();
         if (_tray is not null)
         {

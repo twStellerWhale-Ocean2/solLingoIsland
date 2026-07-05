@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace ScreenTrans.Capture;
 
@@ -52,6 +53,36 @@ public static class ScreenCapture
         using var ms = new MemoryStream();
         bmp.Save(ms, ImageFormat.Png);
         return new CaptureResult(ms.ToArray(), width, height, IsPointMode: true);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT p);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
+    private const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
+
+    /// <summary>
+    /// 直接點選擷取（Issue #86）：不經遮罩，截取整個虛擬桌面（physical px）並於**目前游標位置**畫紅色標記，
+    /// 交查詢層依標記辨識該處那句英文（等同遮罩內雙擊，但由第二熱鍵直接觸發、免雙擊誤觸遊戲）。
+    /// 進程為 PerMonitorV2 DPI aware，故 <c>GetCursorPos</c>／<c>GetSystemMetrics</c> 皆回實際像素、座標一致。
+    /// 虛擬桌面尺寸異常回 null。
+    /// </summary>
+    public static CaptureResult? CaptureAtCursor()
+    {
+        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (!GetCursorPos(out var cur))
+        {
+            return null;
+        }
+        return CaptureWithMarker(vx, vy, vw, vh, cur.X - vx, cur.Y - vy);
     }
 
     /// <summary>畫游標處標記：紅色空心圓＋穿過之十字（醒目、不完全遮住底下文字，供 vision 定位）。</summary>
