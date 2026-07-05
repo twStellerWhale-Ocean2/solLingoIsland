@@ -6,14 +6,14 @@ namespace ScreenTrans.Query;
 /// </summary>
 public static class NoteColors
 {
-    /// <summary>粉彩盤（名稱＋hex）；空 hex／空名＝無底色（預設白）。</summary>
+    /// <summary>粉彩盤（名稱＋hex）；空 hex／空名＝無底色（預設白）。Issue #75：去粉紫（同質性高）改淺灰。</summary>
     public static readonly (string Name, string Hex)[] Palette =
     {
         ("粉紅", "#FBE4EC"),
         ("粉藍", "#E1EFFB"),
         ("粉綠", "#E4F5E9"),
         ("粉黃", "#FBF3D9"),
-        ("粉紫", "#EFE6F9"),
+        ("淺灰", "#E9E9E9"),
     };
 
     /// <summary>色名 → hex；未知名回空字串（＝無底色）。用於智能配色把 AI 回傳之色名對應到盤上色。</summary>

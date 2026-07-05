@@ -67,10 +67,10 @@ public class QueryServicePromptTests
     [Fact]
     public void BuildPrompt_BothContextAndColorRules_ContainsBoth()
     {
-        var p = QueryService.BuildPrompt("RPG", "boss 台詞用粉紫");
+        var p = QueryService.BuildPrompt("RPG", "boss 台詞用淺灰");
         Assert.Contains("參考情境", p);
         Assert.Contains("配色規則", p);
-        Assert.Contains("boss 台詞用粉紫", p);
+        Assert.Contains("boss 台詞用淺灰", p);
     }
 
     // ---- #54：雙擊自動判斷模式提示 ----
