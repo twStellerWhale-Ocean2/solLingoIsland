@@ -24,6 +24,70 @@ public class ContextStoreTests
         Assert.False(b.IsActive);
     }
 
+    // ---- #69：情境內各色配色規則 ----
+
+    [Fact]
+    public void BuildColorRulesText_FormatsNonEmptyByPaletteOrder()
+    {
+        var it = new ContextItem();
+        it.ColorRules["粉藍"] = "悲傷的台詞";
+        it.ColorRules["粉紅"] = "勇敢或戰鬥";
+        var text = ContextStore.BuildColorRulesText(it);
+        // 依盤序：粉紅在粉藍前
+        Assert.Equal("粉紅＝「勇敢或戰鬥」；粉藍＝「悲傷的台詞」", text);
+    }
+
+    [Fact]
+    public void BuildColorRulesText_SkipsBlankDescriptions()
+    {
+        var it = new ContextItem();
+        it.ColorRules["粉紅"] = "  ";      // 空白略過
+        it.ColorRules["粉綠"] = "系統訊息";
+        Assert.Equal("粉綠＝「系統訊息」", ContextStore.BuildColorRulesText(it));
+    }
+
+    [Fact]
+    public void BuildColorRulesText_NullOrEmpty_ReturnsEmpty()
+    {
+        Assert.Equal("", ContextStore.BuildColorRulesText(null));
+        Assert.Equal("", ContextStore.BuildColorRulesText(new ContextItem()));
+    }
+
+    [Fact]
+    public void ColorRules_Roundtrips_ThroughStore()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new ContextStore(path);
+            var d = new ContextsData();
+            var it = ContextStore.Add(d, "遊戲A");
+            it.ColorRules["粉黃"] = "旁白";
+            store.Save(d);
+            var loaded = store.Load().Items.Single();
+            Assert.Equal("旁白", loaded.ColorRules["粉黃"]);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ActiveColorRules_UsesActiveContext()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new ContextStore(path);
+            var d = new ContextsData();
+            var a = ContextStore.Add(d, "A"); // 首則使用中
+            a.ColorRules["粉紫"] = "boss";
+            var b = ContextStore.Add(d, "B");
+            b.ColorRules["粉紅"] = "小兵";
+            store.Save(d);
+            Assert.Equal("粉紫＝「boss」", store.ActiveColorRules()); // A 使用中
+        }
+        finally { File.Delete(path); }
+    }
+
     // ---- #53：圖片自動填名判斷 ----
 
     [Theory]

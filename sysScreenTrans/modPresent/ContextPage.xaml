@@ -35,15 +35,32 @@
           <TextBox x:Name="DescBox" Padding="6" Margin="0,4,0,6" TextWrapping="Wrap"
                    AcceptsReturn="True" MinHeight="80" MaxHeight="150" VerticalScrollBarVisibility="Auto"/>
 
-          <Border Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
+          <!-- 圖片卡：支援拖放圖片檔（Issue #69）；貼上/上傳鈕各半填滿、自動解釋鈕獨立一列填滿 -->
+          <Border x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
             <StackPanel>
               <Image x:Name="Preview" MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform" Margin="0,0,0,6"/>
-              <TextBlock x:Name="NoImageHint" Text="（尚無圖片）" Foreground="#9A6A82" FontSize="12"/>
-              <WrapPanel Margin="0,6,0,0">
-                <Button x:Name="PasteBtn" Content="貼上剪貼簿圖片" Style="{StaticResource GhostButton}" Margin="0,0,6,6"/>
-                <Button x:Name="UploadBtn" Content="上傳檔案" Style="{StaticResource GhostButton}" Margin="0,0,6,6"/>
-                <Button x:Name="DescribeBtn" Content="🔎 以圖片自動解釋" Style="{StaticResource PinkButton}" Margin="0,0,6,6"/>
-              </WrapPanel>
+              <TextBlock x:Name="NoImageHint" Text="（尚無圖片；可貼上、上傳，或直接把圖片檔拖放到此）"
+                         Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap"/>
+              <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="PasteBtn" Grid.Column="0" Content="貼上剪貼簿圖片" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
+                <Button x:Name="UploadBtn" Grid.Column="1" Content="上傳檔案" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
+              </Grid>
+              <Button x:Name="DescribeBtn" Content="🔎 以圖片自動解釋" Style="{StaticResource PinkButton}"
+                      HorizontalAlignment="Stretch" Margin="0,6,0,0"/>
+            </StackPanel>
+          </Border>
+
+          <!-- 配色規則（Issue #69）：各色一格描述；台詞符合哪格即用該色、都不符合＝白 -->
+          <Border Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
+            <StackPanel>
+              <TextBlock Text="配色規則（加入筆記時的底色）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBlock Text="台詞符合哪一格描述就套該色；都不符合＝白色。留空該色即不啟用。"
+                         FontSize="11.5" Foreground="#9A6A82" Margin="0,2,0,6" TextWrapping="Wrap"/>
+              <StackPanel x:Name="ColorRulesPanel"/>
             </StackPanel>
           </Border>
 
