@@ -162,11 +162,10 @@ public partial class ResultWindow : Window
             return;
         }
 
-        // 英文組：原文（逐字可點單獨發音）＋ KK 音標 ＋ 整句播放/自動
-        BodyPanel.Children.Add(Label("原文 ORIGINAL"));
+        // 英文組：原文（逐字可點單獨發音）＋ KK 音標 ＋ 整句播放/自動。
+        // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
-        BodyPanel.Children.Add(Label("KK 音標 PHONETIC"));
-        BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia"));
+        BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia", topMargin: 6));
         BodyPanel.Children.Add(PlayRow("▶ 整句發音",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
@@ -175,7 +174,6 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Add(new Border { Height = 16 });
 
         // 中文組：中譯 ＋ 中文播放/自動
-        BodyPanel.Children.Add(Label("中譯 TRANSLATION"));
         BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", 26, bold: false));
         BodyPanel.Children.Add(PlayRow("▶ 中文發音",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
@@ -252,14 +250,6 @@ public partial class ResultWindow : Window
         return row;
     }
 
-    private static TextBlock Label(string t) => new()
-    {
-        Text = t,
-        Foreground = Brush("#B0688A"),
-        FontSize = 16,
-        Margin = new Thickness(0, 8, 0, 2),
-    };
-
     /// <summary>
     /// 英文原文以逐字可點呈現（Issue #11）：每個單字為一個 <see cref="Hyperlink"/>，
     /// 點選即以 en-US 單獨朗讀該字（重複觸發先停再播）；標點與空白為不可點的純文字，
@@ -295,7 +285,7 @@ public partial class ResultWindow : Window
         return tb;
     }
 
-    private static TextBlock Value(string t, string color, double size, bool bold, string? font = null)
+    private static TextBlock Value(string t, string color, double size, bool bold, string? font = null, double topMargin = 0)
     {
         var tb = new TextBlock
         {
@@ -303,6 +293,7 @@ public partial class ResultWindow : Window
             Foreground = Brush(color),
             FontSize = size,
             TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, topMargin, 0, 0),
         };
         if (bold)
         {
