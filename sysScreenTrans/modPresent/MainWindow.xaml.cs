@@ -61,6 +61,14 @@ public partial class MainWindow : Window
         HotkeyText.Text = AppStatusText.HotkeyLine(hotkeyDisplay);
     }
 
+    /// <summary>新版已靜默下載就緒 → 底部狀態列顯示提示（Issue #51；重啟後套用）。</summary>
+    public void ShowUpdateReady(string version)
+    {
+        UpdateText.Text = AppStatusText.UpdateReady(version);
+        UpdateSeparator.Visibility = Visibility.Visible;
+        UpdateText.Visibility = Visibility.Visible;
+    }
+
     /// <summary>從收合狀態還原並帶到前景。</summary>
     public void RestoreFromTray()
     {
