@@ -13,8 +13,6 @@ using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using Orientation = System.Windows.Controls.Orientation;
-using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
-using DragDeltaEventArgs = System.Windows.Controls.Primitives.DragDeltaEventArgs;
 using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 using Hyperlink = System.Windows.Documents.Hyperlink;
 using Run = System.Windows.Documents.Run;
@@ -25,8 +23,11 @@ namespace ScreenTrans.Present;
 /// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
 /// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
 /// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。
-/// 關閉改由明確操作觸發：ESC／關閉鈕／下一次查詢取代（失焦不自動關閉，切換視窗對照時結果保留）。
-/// 視窗可拖曳標題移動、右下握把縮放；關閉時記住位置與大小（UiStateStore），下次開啟還原。
+/// <b>標準表單（Issue #59）</b>：標準標題列（OS 字型/標題）＋標準邊框拖拉縮放（<c>ResizeMode=CanResize</c>）
+/// ＋工作列按鈕（<c>ShowInTaskbar</c>，失焦後仍可尋、不再像被隱藏）；Topmost 浮於遊戲上「一直存在」，
+/// 同時至多一個（呼叫端 <c>App.CloseResult</c> 取代前一個）。
+/// 關閉由明確操作觸發：ESC／標題列關閉鈕／下一次查詢取代（失焦不自動關閉，切換視窗對照時結果保留）。
+/// 關閉時記住位置與大小（UiStateStore），下次開啟還原。
 /// </summary>
 public partial class ResultWindow : Window
 {
@@ -46,9 +47,7 @@ public partial class ResultWindow : Window
         InitializeComponent();
         _ui = UiStateStore.Load();
         ApplyBounds();
-        HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
-        ResizeGrip.DragDelta += OnResizeDelta;
-        CloseBtn.Click += (_, _) => CloseOnce();
+        // 移動/縮放/關閉皆由 OS 標準 chrome 提供（Issue #59），不再自訂 HeaderBar 拖曳/Thumb 握把/關閉鈕。
         AddNoteBtn.Click += (_, _) =>
         {
             if (_current is { IsEmpty: false } r)
@@ -86,18 +85,6 @@ public partial class ResultWindow : Window
         double vsr = vsl + SystemParameters.VirtualScreenWidth;
         double vsb = vst + SystemParameters.VirtualScreenHeight;
         return top >= vst - 2 && top <= vsb - 40 && (left + width) >= vsl + 80 && left <= vsr - 80;
-    }
-
-    private void OnHeaderDrag(object sender, MouseButtonEventArgs e)
-    {
-        try { DragMove(); }
-        catch { /* 非左鍵按住狀態的邊界情形，忽略 */ }
-    }
-
-    private void OnResizeDelta(object sender, DragDeltaEventArgs e)
-    {
-        Width = Math.Max(MinWidth, Width + e.HorizontalChange);
-        Height = Math.Max(MinHeight, Height + e.VerticalChange);
     }
 
     /// <summary>只關一次：避免關閉過程中 ESC／關閉鈕／取代流程重複呼叫 Close（WPF 會擲「closing」例外）。</summary>
