@@ -30,20 +30,6 @@
         <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
       </ScrollViewer>
 
-      <!-- 右下角縮放握把（置於內容區右下） -->
-      <Thumb x:Name="ResizeGrip" Grid.Row="1"
-             HorizontalAlignment="Right" VerticalAlignment="Bottom"
-             Width="22" Height="22" Margin="0,0,3,3" Cursor="SizeNWSE"
-             ToolTip="拖曳縮放視窗">
-        <Thumb.Template>
-          <ControlTemplate TargetType="Thumb">
-            <Grid Background="Transparent">
-              <Path Data="M 22,6 L 22,22 L 6,22 Z" Fill="#E29CB2" Stretch="Fill" Margin="6"/>
-            </Grid>
-          </ControlTemplate>
-        </Thumb.Template>
-      </Thumb>
-
       <!-- 右上角關閉鈕 -->
       <Button x:Name="CloseBtn" Grid.Row="0"
               HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -86,6 +72,20 @@
                     VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
         </StackPanel>
       </Grid>
+
+      <!-- 視窗右下角縮放握把（Windows 慣例，Issue #40；宣告於工具列後、z 序在上） -->
+      <Thumb x:Name="ResizeGrip" Grid.Row="2"
+             HorizontalAlignment="Right" VerticalAlignment="Bottom"
+             Width="22" Height="22" Margin="0,0,3,3" Cursor="SizeNWSE"
+             ToolTip="拖曳縮放視窗">
+        <Thumb.Template>
+          <ControlTemplate TargetType="Thumb">
+            <Grid Background="Transparent">
+              <Path Data="M 22,6 L 22,22 L 6,22 Z" Fill="#E29CB2" Stretch="Fill" Margin="6"/>
+            </Grid>
+          </ControlTemplate>
+        </Thumb.Template>
+      </Thumb>
     </Grid>
   </Border>
 </Window>
