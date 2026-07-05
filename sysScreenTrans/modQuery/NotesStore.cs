@@ -130,6 +130,28 @@ public sealed class NotesStore
         return NoteAddResult.Added;
     }
 
+    /// <summary>
+    /// 建立資料夾之預設名（檔案總管慣例，Issue #38）：`新資料夾`，已占用則 `新資料夾 (2)`、`(3)`…
+    /// 全樹唯一（建立後隨即進入原地更名，故只需避免同名混淆）。
+    /// </summary>
+    public static string NextNewFolderName(NotesData d)
+    {
+        var names = AllFolders(d).Select(f => f.Name).ToHashSet();
+        const string baseName = "新資料夾";
+        if (!names.Contains(baseName))
+        {
+            return baseName;
+        }
+        for (var i = 2; ; i++)
+        {
+            var candidate = $"{baseName} ({i})";
+            if (!names.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
     /// <summary>新增頂層資料夾。</summary>
     public static NoteFolder AddFolder(NotesData d, string name)
     {

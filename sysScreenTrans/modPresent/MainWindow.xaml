@@ -5,18 +5,18 @@
         ShowInTaskbar="True" WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/assets/app.ico" Background="{StaticResource PinkBg}">
   <Window.Resources>
-    <!-- 分頁鈕：圖示在上、文字在下（USR 回饋，Issue #34） -->
+    <!-- 分頁鈕：圖示在上、文字在下（USR 回饋，Issue #34）；圖示採 Segoe MDL2 Assets 系統字圖（Issue #38） -->
     <Style x:Key="TabButton" TargetType="RadioButton">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Margin" Value="4,0,0,0"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="8,6" Width="78">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="8,7" Width="78">
               <StackPanel HorizontalAlignment="Center">
-                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe UI Emoji" FontSize="20"
-                           HorizontalAlignment="Center"/>
-                <ContentPresenter HorizontalAlignment="Center" Margin="0,2,0,0"
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                           Foreground="{StaticResource PinkText}" HorizontalAlignment="Center"/>
+                <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0"
                                   TextElement.FontSize="11.5" TextElement.Foreground="#8A5A6D"/>
               </StackPanel>
             </Border>
@@ -42,31 +42,35 @@
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <!-- 標題／金鑰狀態 -->
-      <StackPanel Grid.Row="0" Background="{StaticResource PinkTint}">
-        <TextBlock Text="ScreenTrans" FontSize="15" FontWeight="SemiBold"
-                   Foreground="{StaticResource PinkText}" Margin="16,8,0,0"/>
-        <TextBlock x:Name="StatusText" FontSize="12" Foreground="#2E7D46" Margin="16,2,0,8"/>
-      </StackPanel>
-
-      <!-- 功能列分頁（圖示＋文字） -->
-      <Grid Grid.Row="1">
-        <StackPanel Orientation="Horizontal" Margin="12,8,0,6">
-          <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="📒" Content="筆記" IsChecked="True"/>
-          <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="🕘" Content="歷史"/>
-          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="💬" Content="情境"/>
-          <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="⚙️" Content="選項"/>
-          <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="ℹ️" Content="關於"/>
+      <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
+      <Grid Grid.Row="0">
+        <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
+          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="情境"/>
+          <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="筆記" IsChecked="True"/>
+          <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="歷史"/>
+          <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="選項"/>
+          <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="關於"/>
         </StackPanel>
         <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
       </Grid>
 
       <!-- 內容區 -->
-      <ContentControl x:Name="Host" Grid.Row="2" Margin="0"/>
+      <ContentControl x:Name="Host" Grid.Row="1" Margin="0"/>
+
+      <!-- 底部狀態列（Windows 慣例：狀態文字置底——Issue #38） -->
+      <StatusBar Grid.Row="2" Background="{StaticResource PinkTint}" BorderBrush="{StaticResource PinkAccent}" BorderThickness="0,1,0,0">
+        <StatusBarItem>
+          <TextBlock x:Name="KeyStatusText" FontSize="12" Foreground="#2E7D46" Margin="6,0,0,0"/>
+        </StatusBarItem>
+        <Separator Background="{StaticResource PinkAccent}"/>
+        <StatusBarItem>
+          <TextBlock x:Name="HotkeyText" FontSize="12" Foreground="#8A5A6D"/>
+        </StatusBarItem>
+      </StatusBar>
     </Grid>
   </Grid>
 </Window>
