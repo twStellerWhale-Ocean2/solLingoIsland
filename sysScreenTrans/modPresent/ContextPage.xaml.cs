@@ -21,6 +21,17 @@ using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using TextBox = System.Windows.Controls.TextBox;
+using Border = System.Windows.Controls.Border;
+using Grid = System.Windows.Controls.Grid;
+using ColumnDefinition = System.Windows.Controls.ColumnDefinition;
+using GridLength = System.Windows.GridLength;
+using GridUnitType = System.Windows.GridUnitType;
+using CornerRadius = System.Windows.CornerRadius;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using DragEventArgs = System.Windows.DragEventArgs;
+using DragDropEffects = System.Windows.DragDropEffects;
+using DataFormats = System.Windows.DataFormats;
 
 namespace ScreenTrans.Present;
 
@@ -35,6 +46,7 @@ public partial class ContextPage : UserControl
     private ContextsData _data = new();
     private ContextItem? _selected;
     private byte[]? _pending; // 剛貼上/上傳、尚未儲存之圖片
+    private readonly Dictionary<string, TextBox> _colorBoxes = new(); // 各色描述輸入框（Issue #69）
 
     public ContextPage(ContextStore store, Func<byte[], Task<ImageContext>> describeAsync)
     {
@@ -51,7 +63,103 @@ public partial class ContextPage : UserControl
         DescribeBtn.Click += OnDescribe;
         List.SelectionChanged += OnSelect;
 
+        // 圖片卡拖放圖片檔（Issue #69）
+        ImageDropCard.DragOver += (_, e) => { e.Effects = HasImageFile(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
+        ImageDropCard.Drop += OnImageDrop;
+
+        BuildColorRuleRows(); // 各色描述輸入列（Issue #69）
         Reload();
+    }
+
+    // ---- 配色規則各色一格（Issue #69） ----
+
+    private void BuildColorRuleRows()
+    {
+        ColorRulesPanel.Children.Clear();
+        _colorBoxes.Clear();
+        foreach (var (name, hex) in NoteColors.Palette)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 色塊
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 色名
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 描述
+
+            var swatch = new Border
+            {
+                Width = 16,
+                Height = 16,
+                CornerRadius = new CornerRadius(3),
+                Background = Brush(hex),
+                BorderBrush = Brush("#D8B4C2"),
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0),
+            };
+            Grid.SetColumn(swatch, 0);
+            grid.Children.Add(swatch);
+
+            var label = new TextBlock
+            {
+                Text = name,
+                FontSize = 12.5,
+                Foreground = Brush("#6D3A4D"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = 40,
+                Margin = new Thickness(0, 0, 6, 0),
+            };
+            Grid.SetColumn(label, 1);
+            grid.Children.Add(label);
+
+            var box = new TextBox
+            {
+                FontSize = 12.5,
+                Padding = new Thickness(5, 3, 5, 3),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                ToolTip = $"描述哪類台詞用「{name}」；留空＝不用此色",
+            };
+            Grid.SetColumn(box, 2);
+            grid.Children.Add(box);
+
+            _colorBoxes[name] = box;
+            ColorRulesPanel.Children.Add(grid);
+        }
+    }
+
+    private static bool HasImageFile(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop)
+        && e.Data.GetData(DataFormats.FileDrop) is string[] files
+        && files.Any(f => IsImagePath(f));
+
+    private static bool IsImagePath(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif";
+    }
+
+    private void OnImageDrop(object sender, DragEventArgs e)
+    {
+        if (_selected is null || e.Data.GetData(DataFormats.FileDrop) is not string[] files)
+        {
+            return;
+        }
+        var img = files.FirstOrDefault(IsImagePath);
+        if (img is null)
+        {
+            return;
+        }
+        try
+        {
+            var src = LoadImage(img);
+            if (src is null) { MessageBox.Show("無法讀取圖片。", "拖放圖片"); return; }
+            _pending = ToPng(src);
+            ShowPreview(FromBytes(_pending));
+            StatusLine.Text = "已拖入圖片；可「以圖片自動解釋」或直接「儲存」。";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("讀取失敗：" + ex.Message, "拖放圖片");
+        }
     }
 
     public void Reload()
@@ -132,6 +240,11 @@ public partial class ContextPage : UserControl
         DescBox.Text = _selected.Text;
         StatusLine.Text = _selected.IsActive ? "此情境使用中。" : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
+        // 載入各色描述（Issue #69）
+        foreach (var (name, box) in _colorBoxes)
+        {
+            box.Text = _selected.ColorRules.TryGetValue(name, out var d) ? d : "";
+        }
     }
 
     private void ShowPreview(BitmapSource? src)
@@ -162,6 +275,16 @@ public partial class ContextPage : UserControl
         {
             _selected.Image = _store.WriteImage(_selected.Id, _pending);
             _pending = null;
+        }
+        // 收集各色描述（Issue #69）：空白者不存
+        _selected.ColorRules.Clear();
+        foreach (var (name, box) in _colorBoxes)
+        {
+            var d = box.Text?.Trim() ?? "";
+            if (d.Length > 0)
+            {
+                _selected.ColorRules[name] = d;
+            }
         }
         _store.Save(_data);
         BuildList();

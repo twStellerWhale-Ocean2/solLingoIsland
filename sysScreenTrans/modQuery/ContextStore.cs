@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace ScreenTrans.Query;
 
-/// <summary>一則命名應用情境（spec#9）：名稱＋描述文字＋可選圖片檔名＋是否使用中。</summary>
+/// <summary>一則命名應用情境（spec#9）：名稱＋描述文字＋可選圖片檔名＋是否使用中＋各色配色描述。</summary>
 public sealed class ContextItem
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -12,6 +12,11 @@ public sealed class ContextItem
     /// <summary>圖片檔名（<c>contexts\{檔名}</c>）；null＝無圖。</summary>
     public string? Image { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>
+    /// 各色配色描述（Issue #69）：色名（<see cref="NoteColors.Palette"/> 名）→ 描述；台詞符合某色描述即標該色、
+    /// 都不符合＝白。取代 #55 之全域單一規則。舊 contexts.json 無此鍵 → 反序列化為空、即無配色規則。
+    /// </summary>
+    public Dictionary<string, string> ColorRules { get; set; } = new();
 }
 
 /// <summary>我的情境根結構：命名情境清單。</summary>
@@ -155,6 +160,30 @@ public sealed class ContextStore
     public static ContextItem? GetActive(ContextsData d) => d.Items.FirstOrDefault(i => i.IsActive);
 
     public static string ActiveText(ContextsData d) => GetActive(d)?.Text ?? "";
+
+    /// <summary>使用中情境之配色規則注入文字（Issue #69）；無使用中或全空回空字串（＝不啟用智能配色）。</summary>
+    public string ActiveColorRules() => BuildColorRulesText(GetActive(Load()));
+
+    /// <summary>
+    /// 將某情境之各色描述組為查詢注入文字（Issue #69）：略過空白描述，依盤序輸出「色名＝「描述」」以「；」相連；
+    /// 全空回空字串。純函式、可單元測試。供 <see cref="QueryService"/> 之 colorRules（AI 依此回符合之色名或空）。
+    /// </summary>
+    public static string BuildColorRulesText(ContextItem? item)
+    {
+        if (item is null || item.ColorRules.Count == 0)
+        {
+            return "";
+        }
+        var parts = new List<string>();
+        foreach (var (name, _) in NoteColors.Palette) // 依盤序、僅取盤上有效色
+        {
+            if (item.ColorRules.TryGetValue(name, out var desc) && !string.IsNullOrWhiteSpace(desc))
+            {
+                parts.Add($"{name}＝「{desc.Trim()}」");
+            }
+        }
+        return string.Join("；", parts);
+    }
 
     /// <summary>移除一則；回傳被移除項（供呼叫端刪其圖片）。</summary>
     public static ContextItem? Remove(ContextsData d, string id)

@@ -185,7 +185,7 @@ public partial class App : System.Windows.Application
             try
             {
                 var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
-                    _contextStore.ActiveText(), NoteDefaults.ColorRules); // #55 智能配色規則注入
+                    _contextStore.ActiveText(), _contextStore.ActiveColorRules()); // 配色規則＝使用中情境各色描述（#69）
                 var result = await query.QueryAsync(mask.Result.PngBytes, mask.Result.IsPointMode); // #54 雙擊自動判斷
                 if (!result.IsEmpty)
                 {
