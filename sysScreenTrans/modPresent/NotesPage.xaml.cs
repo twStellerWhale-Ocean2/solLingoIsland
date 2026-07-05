@@ -54,7 +54,8 @@ namespace ScreenTrans.Present;
 /// 我的筆記分頁（Issue #34／#38 Windows 慣例收斂）：左側**多層資料夾樹如檔案總管**——頂部工具列僅
 /// [建立資料夾]（建立即進原地更名）、標準樹節點＋右鍵選單（新增子資料夾／更名 `F2` 原地編輯／刪除 `Del`）、
 /// 拖曳移動節點（目標夾高亮、防成環由 <see cref="NotesStore"/> 保證）；右側選取夾之條目拖曳排序
-/// （**插入位置指示線**即時回饋）、播音／檢視／刪除。每次變更即落地 notes.json；語音以 provider 委派取用。
+/// （**插入位置指示線**即時回饋）、**右鍵選單**（播音／檢視／底色粉彩盤／刪除，Issue #44）＋**雙擊＝檢視**、
+/// 卡片底色套 <see cref="NoteEntry.Color"/>。每次變更即落地 notes.json；語音以 provider 委派取用。
 /// </summary>
 public partial class NotesPage : UserControl
 {
@@ -431,11 +432,22 @@ public partial class NotesPage : UserControl
 
     // ---- 條目版型與排序（拖曳中顯示插入位置指示線，Issue #38） ----
 
+    /// <summary>條目底色粉彩盤（Issue #44）：名稱＋hex；空 hex＝預設白。</summary>
+    private static readonly (string Name, string Hex)[] Palette =
+    {
+        ("粉紅", "#FBE4EC"),
+        ("粉藍", "#E1EFFB"),
+        ("粉綠", "#E4F5E9"),
+        ("粉黃", "#FBF3D9"),
+        ("粉紫", "#EFE6F9"),
+    };
+
+    // 條目卡（Issue #44）：底色套 NoteEntry.Color；操作循 Windows 清單慣例——右鍵選單＋雙擊檢視、無常駐按鈕列。
     private UIElement EntryRow(NoteEntry entry)
     {
         var card = new Border
         {
-            Background = Brush("#FFFFFF"),
+            Background = SafeBrush(entry.Color, "#FFFFFF"),
             BorderBrush = Brush("#F4C2D0"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
@@ -447,7 +459,6 @@ public partial class NotesPage : UserControl
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var handle = new TextBlock
         {
@@ -476,19 +487,84 @@ public partial class NotesPage : UserControl
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-        actions.Children.Add(ActionButton("▶", "播音（英文原句）", "#2F6FED", "#F0F6FF", "#CFE0FB",
-            () => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true)));
-        actions.Children.Add(ActionButton("檢視", "開啟中英詳情", "#4A4A4A", "#F5F5F5", "#DCDCDC",
-            () => ViewRequested?.Invoke(entry)));
-        actions.Children.Add(ActionButton("刪除", "自筆記移除此筆", "#B23B3B", "#FDF2F2", "#F0D2D2",
-            () => { NotesStore.RemoveEntry(_data, entry.Id); Persist(); }));
-        Grid.SetColumn(actions, 2);
-        grid.Children.Add(actions);
-
         card.Child = grid;
         card.Tag = entry;
+        card.ContextMenu = MakeEntryMenu(entry);
+        card.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ClickCount == 2) // 雙擊＝檢視（Windows 清單慣例）
+            {
+                ViewRequested?.Invoke(entry);
+                e.Handled = true;
+            }
+        };
         return card;
+    }
+
+    private ContextMenu MakeEntryMenu(NoteEntry entry)
+    {
+        var menu = new ContextMenu();
+        var play = new MenuItem { Header = "▶ 播音", Foreground = Brush("#2F6FED") };
+        play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
+        var view = new MenuItem { Header = "檢視" };
+        view.Click += (_, _) => ViewRequested?.Invoke(entry);
+
+        var color = new MenuItem { Header = "底色" };
+        color.Items.Add(ColorItem(entry, "無底色", ""));
+        foreach (var (name, hex) in Palette)
+        {
+            color.Items.Add(ColorItem(entry, name, hex));
+        }
+
+        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
+        delete.Click += (_, _) => { NotesStore.RemoveEntry(_data, entry.Id); Persist(); };
+
+        menu.Items.Add(play);
+        menu.Items.Add(view);
+        menu.Items.Add(color);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(delete);
+        return menu;
+    }
+
+    private MenuItem ColorItem(NoteEntry entry, string name, string hex)
+    {
+        var item = new MenuItem
+        {
+            Header = name,
+            IsCheckable = false,
+            Icon = new Border
+            {
+                Width = 14,
+                Height = 14,
+                CornerRadius = new CornerRadius(3),
+                Background = SafeBrush(hex, "#FFFFFF"),
+                BorderBrush = Brush("#D8B4C2"),
+                BorderThickness = new Thickness(1),
+            },
+        };
+        if ((entry.Color ?? "") == hex)
+        {
+            item.FontWeight = System.Windows.FontWeights.SemiBold;
+            item.Header = name + "　✓"; // 目前色標記
+        }
+        item.Click += (_, _) =>
+        {
+            NotesStore.SetEntryColor(_data, entry.Id, hex);
+            Persist();
+        };
+        return item;
+    }
+
+    /// <summary>hex 轉筆刷；空或無效值回退預設色（舊檔容錯）。</summary>
+    private static SolidColorBrush SafeBrush(string? hex, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(hex))
+        {
+            try { return Brush(hex!); }
+            catch { /* 無效色值回退 */ }
+        }
+        return Brush(fallback);
     }
 
     private void OnEntryHandleMove(object sender, MouseEventArgs e)
@@ -628,25 +704,6 @@ public partial class NotesPage : UserControl
             dc.DrawEllipse(LineBrush, null, new Point(3, _y), 3.5, 3.5);
             dc.DrawLine(LinePen, new Point(6, _y), new Point(width, _y));
         }
-    }
-
-    private static Button ActionButton(string content, string tip, string fg, string bg, string border, Action onClick)
-    {
-        var btn = new Button
-        {
-            Content = content,
-            ToolTip = tip,
-            Foreground = Brush(fg),
-            Background = Brush(bg),
-            BorderBrush = Brush(border),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 4, 10, 4),
-            Margin = new Thickness(6, 0, 0, 0),
-            FontSize = 12.5,
-            Cursor = Cursors.Hand,
-        };
-        btn.Click += (_, _) => onClick();
-        return btn;
     }
 
     private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));

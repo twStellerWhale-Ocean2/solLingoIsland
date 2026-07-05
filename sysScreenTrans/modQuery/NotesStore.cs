@@ -207,6 +207,24 @@ public sealed class NotesStore
     /// <summary>清空指定資料夾之全部條目（不含子資料夾；右欄[清除全部]，Issue #42）。找不到夾即無為。</summary>
     public static void ClearEntries(NotesData d, string folderId) => FindFolder(d, folderId)?.Entries.Clear();
 
+    /// <summary>
+    /// 設定條目底色（Issue #44）：跨全樹依 Id 尋得後以 record `with` 換置；<paramref name="color"/>
+    /// 為 hex 字串、空＝預設白。找不到條目回 false。
+    /// </summary>
+    public static bool SetEntryColor(NotesData d, string entryId, string color)
+    {
+        foreach (var f in AllFolders(d))
+        {
+            var i = f.Entries.FindIndex(e => e.Id == entryId);
+            if (i >= 0)
+            {
+                f.Entries[i] = f.Entries[i] with { Color = color ?? "" };
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>新增頂層資料夾。</summary>
     public static NoteFolder AddFolder(NotesData d, string name)
     {
