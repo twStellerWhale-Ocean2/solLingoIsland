@@ -19,7 +19,11 @@ public partial class OptionsPage : UserControl
     private const string DefaultVoiceTag = "";
     private ISpeechService? _testSvc;
     private HotKeyBinding _hotkey = HotKeyBinding.Default;
-    private bool _listening;
+    private HotKeyBinding _hotkeyPoint = HotKeyBinding.Parse(AppConfig.DefaultHotkeyPoint); // 直接點選鍵（#86）
+    private HotkeyTarget _listening = HotkeyTarget.None;
+
+    /// <summary>目前正在監聽擷取哪一個熱鍵（Issue #86）。</summary>
+    private enum HotkeyTarget { None, Invoke, Point }
 
     /// <summary>目前組態（供 Gather 保留未在本頁呈現之欄位）。</summary>
     public AppConfig Config { get; private set; }
@@ -38,7 +42,8 @@ public partial class OptionsPage : UserControl
             VoiceBox.Items.Add(new ComboBoxItem { Content = v, Tag = v });
         }
 
-        ChangeHotkeyBtn.Click += (_, _) => StartListening();
+        ChangeHotkeyBtn.Click += (_, _) => StartListening(HotkeyTarget.Invoke);
+        ChangePointHotkeyBtn.Click += (_, _) => StartListening(HotkeyTarget.Point);
         PreviewKeyDown += OnListenKeyDown;
         PreviewMouseDown += OnListenMouseDown;
         SaveBtn.Click += OnSave;
@@ -56,30 +61,37 @@ public partial class OptionsPage : UserControl
         SelectByTag(VoiceBox, c.Voice ?? DefaultVoiceTag);
         QueryModelBox.Text = c.Model;
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
+        _hotkeyPoint = HotKeyBinding.Parse(c.HotkeyPoint);
         UpdateHotkeyStatus();
     }
 
-    private void UpdateHotkeyStatus() => HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
-
-    private void StartListening()
+    private void UpdateHotkeyStatus()
     {
-        _listening = true;
-        HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
+        HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
+        HotkeyPointStatus.Text = "Current: " + _hotkeyPoint.DisplayName;
+    }
+
+    private void StartListening(HotkeyTarget target)
+    {
+        _listening = target;
+        (target == HotkeyTarget.Point ? HotkeyPointStatus : HotkeyStatus).Text = "Press a hotkey… (Esc to cancel)";
         ChangeHotkeyBtn.IsEnabled = false;
+        ChangePointHotkeyBtn.IsEnabled = false;
         Focus();
         Keyboard.Focus(this);
     }
 
     private void StopListening()
     {
-        _listening = false;
+        _listening = HotkeyTarget.None;
         ChangeHotkeyBtn.IsEnabled = true;
+        ChangePointHotkeyBtn.IsEnabled = true;
         UpdateHotkeyStatus();
     }
 
     private void OnListenKeyDown(object sender, KeyEventArgs e)
     {
-        if (!_listening)
+        if (_listening == HotkeyTarget.None)
         {
             return;
         }
@@ -100,21 +112,19 @@ public partial class OptionsPage : UserControl
         if (m.HasFlag(ModifierKeys.Alt)) mods |= HotKeyBinding.ModAlt;
         if (m.HasFlag(ModifierKeys.Shift)) mods |= HotKeyBinding.ModShift;
         if (m.HasFlag(ModifierKeys.Windows)) mods |= HotKeyBinding.ModWin;
-        _hotkey = HotKeyBinding.Keyboard(mods, (uint)KeyInterop.VirtualKeyFromKey(key));
-        StopListening();
+        SetListenedBinding(HotKeyBinding.Keyboard(mods, (uint)KeyInterop.VirtualKeyFromKey(key)));
     }
 
     private void OnListenMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!_listening)
+        if (_listening == HotkeyTarget.None)
         {
             return;
         }
         if (e.LeftButton == MouseButtonState.Pressed && e.RightButton == MouseButtonState.Pressed)
         {
             e.Handled = true;
-            _hotkey = HotKeyBinding.OfMouse(MouseTrigger.LeftRight);
-            StopListening();
+            SetListenedBinding(HotKeyBinding.OfMouse(MouseTrigger.LeftRight));
             return;
         }
         MouseTrigger? trig = e.ChangedButton switch
@@ -129,7 +139,20 @@ public partial class OptionsPage : UserControl
             return;
         }
         e.Handled = true;
-        _hotkey = HotKeyBinding.OfMouse(trig.Value);
+        SetListenedBinding(HotKeyBinding.OfMouse(trig.Value));
+    }
+
+    /// <summary>把擷取到的綁定寫入目前正在監聽的熱鍵（喚起／點選），並結束監聽（Issue #86）。</summary>
+    private void SetListenedBinding(HotKeyBinding binding)
+    {
+        if (_listening == HotkeyTarget.Point)
+        {
+            _hotkeyPoint = binding;
+        }
+        else
+        {
+            _hotkey = binding;
+        }
         StopListening();
     }
 
@@ -163,7 +186,8 @@ public partial class OptionsPage : UserControl
         Config.MaxRetries,
         _hotkey.Serialize(),
         Config.HistoryMax,   // 保留（#13）
-        Config.Context);     // 保留情境（由情境分頁管理，本頁不重置）
+        Config.Context,      // 保留情境（由情境分頁管理，本頁不重置）
+        _hotkeyPoint.Serialize()); // 直接點選鍵（#86）
 
     private void ApplyKeyIfProvided()
     {
