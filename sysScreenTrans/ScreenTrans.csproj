@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <!-- TTS：Windows 內建語音合成（SAPI）[techItem語音合成] -->
+    <PackageReference Include="CommunityToolkit.WinUI.Notifications" Version="7.1.2" />
     <PackageReference Include="System.Speech" Version="9.0.0" />
     <!-- 麥克風錄音（發音練習 spec#10）[techItem發音評分 之錄音端]：NAudio WaveInEvent（MIT） -->
     <PackageReference Include="NAudio" Version="2.2.1" />
