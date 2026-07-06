@@ -17,7 +17,7 @@
 - apiIntf：標準OPENAI的API協定
 - comIntf：通用HTTPS連線
 - techApp：桌面查詢工具
-- techItem：語音合成、發音評分
+- techItem：語音合成、發音評分、桌面通知
 - techStack：DotnetWin（候選家規選型，待 kdbUserSkills 裁決）
 
 ## 自訂設計（不在此，見 design.md 文字）
