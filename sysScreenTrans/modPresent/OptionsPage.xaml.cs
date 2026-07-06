@@ -31,6 +31,12 @@ public partial class OptionsPage : UserControl
     /// <summary>按「儲存」後觸發，帶新組態；呼叫端據此重建服務、更新狀態、重註冊熱鍵。</summary>
     public event Action<AppConfig>? SettingsChanged;
 
+    /// <summary>
+    /// 監聽指定快捷鍵之開始（<c>true</c>）／結束（<c>false</c>）；呼叫端（App）據此暫停/恢復全域熱鍵，
+    /// 避免監聽期間按下與現行相同之鍵誤觸喚起，並讓鍵盤組合不被 <c>RegisterHotKey</c> 吞鍵（Issue #89）。
+    /// </summary>
+    public event Action<bool>? ListeningChanged;
+
     public OptionsPage(AppConfig current)
     {
         InitializeComponent();
@@ -46,6 +52,8 @@ public partial class OptionsPage : UserControl
         ChangePointHotkeyBtn.Click += (_, _) => StartListening(HotkeyTarget.Point);
         PreviewKeyDown += OnListenKeyDown;
         PreviewMouseDown += OnListenMouseDown;
+        // 監聽中若焦點離開本頁（切分頁/切視窗而未擷取或未按 Esc）→ 視同取消，確保全域熱鍵必恢復（Issue #89）
+        LostKeyboardFocus += (_, _) => StopListening();
         SaveBtn.Click += OnSave;
         TestBtn.Click += OnTest;
 
@@ -74,6 +82,7 @@ public partial class OptionsPage : UserControl
     private void StartListening(HotkeyTarget target)
     {
         _listening = target;
+        ListeningChanged?.Invoke(true); // 暫停全域熱鍵，避免監聽期間按現行鍵誤觸喚起（Issue #89）
         (target == HotkeyTarget.Point ? HotkeyPointStatus : HotkeyStatus).Text = "Press a hotkey… (Esc to cancel)";
         ChangeHotkeyBtn.IsEnabled = false;
         ChangePointHotkeyBtn.IsEnabled = false;
@@ -83,10 +92,15 @@ public partial class OptionsPage : UserControl
 
     private void StopListening()
     {
+        if (_listening == HotkeyTarget.None)
+        {
+            return; // 已非監聽（如 LostKeyboardFocus 於非監聽時觸發）→ 不重覆恢復
+        }
         _listening = HotkeyTarget.None;
         ChangeHotkeyBtn.IsEnabled = true;
         ChangePointHotkeyBtn.IsEnabled = true;
         UpdateHotkeyStatus();
+        ListeningChanged?.Invoke(false); // 恢復全域熱鍵（Issue #89）
     }
 
     private void OnListenKeyDown(object sender, KeyEventArgs e)
