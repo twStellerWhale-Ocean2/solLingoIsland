@@ -68,6 +68,7 @@ public partial class NotesPage : UserControl
     private readonly Func<IAudioRecorder> _recorderFactory;     // 麥克風錄音工廠（spec#10）
     private readonly Func<int> _threshold;                      // 發音及格門檻（設定頁可調）
     private IAudioRecorder? _recording;                         // 按住期間之錄音器（同時至多一個）
+    private PracticeCell? _activeCell;                          // 錄音中之卡片繫結（供樹重建時收束、釋放擷取）
     private Action<double>? _levelHandler;                      // 錄音期間即時音量訂閱（收束時退訂）
     private bool _practiceBusy;                                 // 評分中守衛：不重入
     private System.Windows.Threading.DispatcherTimer? _maxRecTimer; // 錄音上限守衛
@@ -233,6 +234,7 @@ public partial class NotesPage : UserControl
 
     private void RenderFolder()
     {
+        CancelActivePractice(); // 重建卡片前收束進行中的錄音，免舊卡卸離後錄音器/計時器外洩、麥克風卡紅（§5 #1）
         EntryPanel.Children.Clear();
         var f = Selected;
         bool any = f is not null && f.Entries.Count > 0;
@@ -628,6 +630,7 @@ public partial class NotesPage : UserControl
         btn.CaptureMouse(); // 放開若移出按鈕仍能收到 up
         SetMic(btn, recording: true);
         cell.Box.ShowRecording();
+        _activeCell = cell; // 記錄進行中之卡片，供樹重建時收束（§5 #1）
         _maxRecTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(NaudioRecorder.MaxRecordMs) };
         _maxRecTimer.Tick += (_, _) => FinishRecording(cell);
         _maxRecTimer.Start();
@@ -663,6 +666,7 @@ public partial class NotesPage : UserControl
             return; // 已結束（上限守衛與放開競態時只跑一次）
         }
         _recording = null;
+        _activeCell = null;
         if (_levelHandler is not null)
         {
             rec.LevelChanged -= _levelHandler; // 退訂即時音量
@@ -674,7 +678,7 @@ public partial class NotesPage : UserControl
         SetMic(cell.Mic, recording: false);
         if (wav is null)
         {
-            cell.Box.ShowBest(CurrentScore(cell.Entry.Id)); // 太短/無音 → 成績框回前態（含 <MinRecordMs 之放開）
+            RestoreBox(cell); // 太短/無音 → 成績框回前態（含 <MinRecordMs 之放開）
             if (tooShort)
             {
                 ToastNotifier.Show("Recording too short");
@@ -684,7 +688,7 @@ public partial class NotesPage : UserControl
         var assessor = _assessor();
         if (assessor is null)
         {
-            cell.Box.ShowBest(CurrentScore(cell.Entry.Id));
+            RestoreBox(cell);
             ToastNotifier.Show("Set your OpenAI key to score pronunciation");
             return;
         }
@@ -696,7 +700,14 @@ public partial class NotesPage : UserControl
             var threshold = _threshold();
             NotesStore.SetPracticeScore(_data, cell.Entry.Id, result.Score); // 取最佳分
             _store.Save(_data);
-            cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
+            if (IsBoxLive(cell.Box))
+            {
+                cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
+            }
+            else
+            {
+                RenderFolder(); // 樹於評分間被重建（§5 #1）→ 以最新最佳分重繪目前夾
+            }
             var passed = result.Score >= threshold;
             var head = passed
                 ? $"Pronunciation {result.Score} / {threshold}  ✓ passed"
@@ -705,7 +716,7 @@ public partial class NotesPage : UserControl
         }
         catch (QueryException ex)
         {
-            cell.Box.ShowBest(CurrentScore(cell.Entry.Id));
+            RestoreBox(cell);
             var offline = ex.Message.Contains("Network", StringComparison.OrdinalIgnoreCase)
                           || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
             ToastNotifier.Show(offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
@@ -713,7 +724,7 @@ public partial class NotesPage : UserControl
         catch (Exception)
         {
             // 非預期例外（含 async void）→ 復原並提示，不使 UI 執行緒崩潰
-            cell.Box.ShowBest(CurrentScore(cell.Entry.Id));
+            RestoreBox(cell);
             ToastNotifier.Show("Scoring failed, please try again");
         }
         finally
@@ -721,6 +732,47 @@ public partial class NotesPage : UserControl
             _practiceBusy = false;
         }
     }
+
+    /// <summary>
+    /// 中止進行中的錄音（樹將重建時呼叫，§5 #1）：停上限計時器、退訂即時音量、停並棄置錄音器、釋放滑鼠擷取、
+    /// 麥克風復位。評分中之 <c>await</c> 無法中止，但其分數以條目 Id 寫回仍正確；此處只確保錄音硬體與計時器不外洩、
+    /// 麥克風不卡在紅色。無進行中錄音時為無為。
+    /// </summary>
+    private void CancelActivePractice()
+    {
+        _maxRecTimer?.Stop();
+        _maxRecTimer = null;
+        var rec = _recording;
+        if (rec is not null)
+        {
+            _recording = null;
+            if (_levelHandler is not null)
+            {
+                rec.LevelChanged -= _levelHandler;
+                _levelHandler = null;
+            }
+            try { rec.Stop(out _); } catch { /* 停止失敗不致命 */ }
+            (rec as IDisposable)?.Dispose();
+        }
+        if (_activeCell is not null)
+        {
+            if (_activeCell.Mic.IsMouseCaptured) { _activeCell.Mic.ReleaseMouseCapture(); }
+            SetMic(_activeCell.Mic, recording: false);
+            _activeCell = null;
+        }
+    }
+
+    /// <summary>成績框仍在畫面上（未因樹重建而卸離）才回前態；已卸離則跳過，重建之新框已反映正確狀態。</summary>
+    private void RestoreBox(PracticeCell cell)
+    {
+        if (IsBoxLive(cell.Box))
+        {
+            cell.Box.ShowBest(CurrentScore(cell.Entry.Id));
+        }
+    }
+
+    /// <summary>成績框是否仍連於呈現中的視覺樹（樹重建後舊框卸離 → 回 false）。</summary>
+    private static bool IsBoxLive(PracticeScoreBox box) => System.Windows.PresentationSource.FromVisual(box) is not null;
 
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {

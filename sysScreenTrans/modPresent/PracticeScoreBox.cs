@@ -101,6 +101,9 @@ public sealed class PracticeScoreBox : Border
         grid.Children.Add(_spinner);
         Child = grid;
 
+        // 卸離視覺樹（卡片重建）時停掉閃分計時器與 spinner 動畫，免孤兒框滯留（§5 #4）
+        Unloaded += (_, _) => { CancelFlash(); StopSpin(); };
+
         RenderBest();
     }
 
