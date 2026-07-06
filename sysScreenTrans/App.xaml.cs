@@ -34,6 +34,7 @@ public partial class App : System.Windows.Application
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
     private readonly ContextStore _contextStore = new();
+    private readonly INotificationService _notify = new WinToastNotificationService(); // 發音回饋系統通知（#101）
     private UpdateService? _updates;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
@@ -83,7 +84,7 @@ public partial class App : System.Windows.Application
         // 分頁（UserControl）＋統一主視窗
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 發音評分（spec#10）
         _notesPage = new NotesPage(_notesStore, () => _speech,
-            () => _assessor, () => new NaudioRecorder(), () => _config.PronPassThreshold);
+            () => _assessor, () => new NaudioRecorder(), () => _config.PronPassThreshold, _notify);
         _notesPage.ViewRequested += entry => ShowDetail(entry.ToResult());
         _historyPage = new HistoryPage(_historyStore, () => _speech);
         _historyPage.ViewRequested += entry => ShowDetail(entry.ToResult());

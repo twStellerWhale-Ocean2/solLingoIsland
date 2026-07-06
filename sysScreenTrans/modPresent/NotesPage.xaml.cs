@@ -67,6 +67,7 @@ public partial class NotesPage : UserControl
     private readonly Func<IPronunciationAssessor?> _assessor;   // 發音評分（spec#10）
     private readonly Func<IAudioRecorder> _recorderFactory;     // 麥克風錄音工廠（spec#10）
     private readonly Func<int> _threshold;                      // 發音及格門檻（設定頁可調）
+    private readonly INotificationService _notify;              // 發音回饋系統通知（#101；未安裝降級浮層）
     private IAudioRecorder? _recording;                         // 按住期間之錄音器（同時至多一個）
     private PracticeCell? _activeCell;                          // 錄音中之卡片繫結（供樹重建時收束、釋放擷取）
     private Action<double>? _levelHandler;                      // 錄音期間即時音量訂閱（收束時退訂）
@@ -84,7 +85,8 @@ public partial class NotesPage : UserControl
     private InsertionAdorner? _insertLine;  // 條目拖曳之插入位置指示線（Issue #38）
 
     public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider,
-        Func<IPronunciationAssessor?> assessorProvider, Func<IAudioRecorder> recorderFactory, Func<int> passThreshold)
+        Func<IPronunciationAssessor?> assessorProvider, Func<IAudioRecorder> recorderFactory, Func<int> passThreshold,
+        INotificationService notify)
     {
         InitializeComponent();
         _store = store;
@@ -92,6 +94,7 @@ public partial class NotesPage : UserControl
         _assessor = assessorProvider;
         _recorderFactory = recorderFactory;
         _threshold = passThreshold;
+        _notify = notify;
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
@@ -616,7 +619,7 @@ public partial class NotesPage : UserControl
         if (start != RecordStart.Ok)
         {
             (rec as IDisposable)?.Dispose();
-            ToastNotifier.Show(start switch
+            NotifyFail(cell, start switch
             {
                 RecordStart.NoDevice => "No microphone found",
                 RecordStart.PermissionDenied => "Allow microphone access in Windows Privacy settings",
@@ -681,7 +684,7 @@ public partial class NotesPage : UserControl
             RestoreBox(cell); // 太短/無音 → 成績框回前態（含 <MinRecordMs 之放開）
             if (tooShort)
             {
-                ToastNotifier.Show("Recording too short");
+                NotifyFail(cell, "Recording too short");
             }
             return;
         }
@@ -689,7 +692,7 @@ public partial class NotesPage : UserControl
         if (assessor is null)
         {
             RestoreBox(cell);
-            ToastNotifier.Show("Set your OpenAI key to score pronunciation");
+            NotifyFail(cell, "Set your OpenAI key to score pronunciation");
             return;
         }
         _practiceBusy = true;
@@ -708,24 +711,20 @@ public partial class NotesPage : UserControl
             {
                 RenderFolder(); // 樹於評分間被重建（§5 #1）→ 以最新最佳分重繪目前夾
             }
-            var passed = result.Score >= threshold;
-            var head = passed
-                ? $"Pronunciation {result.Score} / {threshold}  ✓ passed"
-                : $"Pronunciation {result.Score} / {threshold} — try again";
-            ToastNotifier.Show(string.IsNullOrWhiteSpace(result.Note) ? head : head + "\n" + result.Note);
+            NotifyResult(cell, result.Score, threshold, result.Note); // 系統通知：標題含目標句、內文分數/門檻/建議
         }
         catch (QueryException ex)
         {
             RestoreBox(cell);
             var offline = ex.Message.Contains("Network", StringComparison.OrdinalIgnoreCase)
                           || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
-            ToastNotifier.Show(offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
+            NotifyFail(cell, offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
         }
         catch (Exception)
         {
             // 非預期例外（含 async void）→ 復原並提示，不使 UI 執行緒崩潰
             RestoreBox(cell);
-            ToastNotifier.Show("Scoring failed, please try again");
+            NotifyFail(cell, "Scoring failed, please try again");
         }
         finally
         {
@@ -773,6 +772,20 @@ public partial class NotesPage : UserControl
 
     /// <summary>成績框是否仍連於呈現中的視覺樹（樹重建後舊框卸離 → 回 false）。</summary>
     private static bool IsBoxLive(PracticeScoreBox box) => System.Windows.PresentationSource.FromVisual(box) is not null;
+
+    /// <summary>發音評分結果之系統通知（#101）：標題含目標句、內文含分數/門檻/過不過＋建議。</summary>
+    private void NotifyResult(PracticeCell cell, int score, int threshold, string note)
+    {
+        var (title, body) = PronNotify.Result(cell.Entry.Original, score, threshold, note);
+        _notify.Show(title, body);
+    }
+
+    /// <summary>發音練習失敗態之系統通知（#101）：標題含目標句、內文為明確訊息。</summary>
+    private void NotifyFail(PracticeCell cell, string message)
+    {
+        var (title, body) = PronNotify.Failure(cell.Entry.Original, message);
+        _notify.Show(title, body);
+    }
 
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {
