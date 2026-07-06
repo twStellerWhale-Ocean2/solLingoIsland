@@ -26,6 +26,7 @@ public partial class App : System.Windows.Application
     private OptionsPage? _optionsPage;
     private HotKeyService? _hotkey;
     private HotKeyService? _hotkeyPoint; // 直接點選擷取熱鍵（Issue #86）
+    private HotkeyListenGuard? _listenGuard; // 指定快捷鍵監聽期間暫停/恢復全域熱鍵（Issue #89）
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
@@ -88,6 +89,12 @@ public partial class App : System.Windows.Application
             AddToNotes(new NoteAddRequest(entry.ToResult(), NoteDefaults.FolderName, NoteDefaults.ColorHex));
         _optionsPage = new OptionsPage(_config);
         _optionsPage.SettingsChanged += ApplySettings;
+        // 指定快捷鍵監聽期間暫停全域熱鍵、結束後依現行組態恢復（Issue #89）：
+        // 避免監聽中按下現行鍵誤觸喚起，並使鍵盤組合不被 RegisterHotKey 攔截吞鍵而得正確擷取。
+        _listenGuard = new HotkeyListenGuard(
+            suspend: () => { _hotkey?.Unregister(); _hotkeyPoint?.Unregister(); },
+            resume: RegisterHotkeyOrWarn);
+        _optionsPage.ListeningChanged += _listenGuard.OnListeningChanged;
         _contextStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
         _contextPage = new ContextPage(_contextStore,
             bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
