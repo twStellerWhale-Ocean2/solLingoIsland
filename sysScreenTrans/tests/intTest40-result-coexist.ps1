@@ -117,12 +117,24 @@ $startedByTest = $false
   } else { write-host "* 沿用執行中之 ScreenTrans（pid $($proc.Id)）" }
   $appPid = $proc.Id
 
-  [T40.Native]::ShowWindow((Get-Process -Id $appPid).MainWindowHandle, 9) | Out-Null
-  [T40.Native]::SetForegroundWindow((Get-Process -Id $appPid).MainWindowHandle) | Out-Null
-  Start-Sleep 1
-  $main = Find-AppWindow $appPid "ScreenTrans"
+  # 還原＋前景確保（重試至多 5 次）：主視窗預設最小化，rect 在 -32000 時所有點擊都會落空
+  $main = $null
+  for ($try = 0; $try -lt 5; $try++) {
+    [T40.Native]::ShowWindow((Get-Process -Id $appPid).MainWindowHandle, 9) | Out-Null
+    [T40.Native]::SetForegroundWindow((Get-Process -Id $appPid).MainWindowHandle) | Out-Null
+    Start-Sleep 1
+    $main = Find-AppWindow $appPid "ScreenTrans"
+    if ($main) {
+      try { ($main.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).SetWindowVisualState([Windows.Automation.WindowVisualState]::Normal) } catch {}
+      Start-Sleep -Milliseconds 400
+      $mr = $main.Current.BoundingRectangle
+      if ($mr.X -gt -10000 -and -not $main.Current.IsOffscreen) { break }
+    }
+    write-host "* 主視窗尚未還原（第 $($try+1) 次），重試…" -ForegroundColor Yellow
+  }
   if (-not $main) { write-host "找不到主視窗（UIA）" -ForegroundColor Red; exit 1 }
   $mr = $main.Current.BoundingRectangle
+  if ($mr.X -le -10000) { write-host "主視窗還原失敗（rect 仍在螢幕外）" -ForegroundColor Red; exit 1 }
   write-host "* 主視窗定位 OK（$([int]$mr.X),$([int]$mr.Y) $([int]$mr.Width)x$([int]$mr.Height)）" -ForegroundColor Green
 
   #endregion
@@ -170,10 +182,14 @@ $startedByTest = $false
   $pt = $pts | Where-Object { $_[0] -lt $rw.X -or $_[0] -gt ($rw.X + $rw.Width) -or $_[1] -lt $rw.Y -or $_[1] -gt ($rw.Y + $rw.Height) } | Select-Object -First 1
   if (-not $pt) { write-host "找不到未被結果卡覆蓋之主視窗點擊點（請挪動視窗後重跑）" -ForegroundColor Red; exit 1 }
   write-host "* 點選主視窗（$($pt[0]),$($pt[1])）使其 Activated"
-  Invoke-ClickAt $pt[0] $pt[1] 1
-  Start-Sleep -Milliseconds 1200
-  $fg = [T40.Native]::GetForegroundWindow()
-  if ([int64]$fg -ne [int64]$main.Current.NativeWindowHandle) {
+  $fgOk = $false
+  for ($k = 0; $k -lt 3 -and -not $fgOk; $k++) {
+    Invoke-ClickAt $pt[0] $pt[1] 1
+    Start-Sleep -Milliseconds 1200
+    $fgOk = ([int64][T40.Native]::GetForegroundWindow() -eq [int64]$main.Current.NativeWindowHandle)
+    if (-not $fgOk) { write-host "* 點擊未取得前景（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+  }
+  if (-not $fgOk) {
     write-host "前置失真：點擊後前景視窗非主視窗（測試無效，重跑或檢查視窗位置）" -ForegroundColor Red; exit 1
   }
   write-host "* 已確認主視窗為前景（Activated 確實發生）"

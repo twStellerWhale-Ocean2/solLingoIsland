@@ -235,9 +235,11 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛收藏入口，Issue #34 移除歷史/筆記入口）。</summary>
+    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛收藏入口，Issue #34 移除歷史/筆記入口）。
+    /// 起手先過單一守衛——「同時至多一個」由本方法結構保證，不倚賴各呼叫端自律或遮罩覆蓋的偶然保護（#107 審查）。</summary>
     private ResultWindow NewResultWindow()
     {
+        CloseResult();
         var win = new ResultWindow();
         _result = win;
         win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
@@ -287,10 +289,9 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）；
-    /// 先經單一守衛取代前一結果卡——移除 Activated 關閉路徑後（Issue #105）此處不再被順帶蓋住，須自守「同時至多一個」。</summary>
+    /// 取代前一結果卡之單一守衛由 NewResultWindow 起手保證（Issue #105/#107）。</summary>
     private void ShowDetail(QueryResult r)
     {
-        CloseResult();
         var win = NewResultWindow();
         win.Show();
         win.Activate();

@@ -83,7 +83,7 @@
         </StackPanel>
         <!-- 喚回結果卡動作鈕（Issue #107）：MDL2 E8A7 OpenInNewWindow -->
         <Button x:Name="ResultBtn" Style="{StaticResource ActionButton}" Tag="&#xE8A7;" Content="Result"
-                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,6"/>
+                ToolTip="Bring back the query result" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,6"/>
         <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
       </Grid>
 

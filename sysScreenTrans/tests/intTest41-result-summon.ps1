@@ -117,11 +117,23 @@ $startedByTest = $false
   } else { write-host "* 沿用執行中之 ScreenTrans（pid $($proc.Id)）" }
   $appPid = $proc.Id
 
-  [T41.Native]::ShowWindow((Get-Process -Id $appPid).MainWindowHandle, 9) | Out-Null
-  [T41.Native]::SetForegroundWindow((Get-Process -Id $appPid).MainWindowHandle) | Out-Null
-  Start-Sleep 1
-  $main = Find-AppWindow $appPid "ScreenTrans"
+  # 還原＋前景確保（重試至多 5 次）：主視窗預設最小化，rect 在 -32000 時所有點擊都會落空
+  $main = $null
+  for ($try = 0; $try -lt 5; $try++) {
+    [T41.Native]::ShowWindow((Get-Process -Id $appPid).MainWindowHandle, 9) | Out-Null
+    [T41.Native]::SetForegroundWindow((Get-Process -Id $appPid).MainWindowHandle) | Out-Null
+    Start-Sleep 1
+    $main = Find-AppWindow $appPid "ScreenTrans"
+    if ($main) {
+      try { ($main.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).SetWindowVisualState([Windows.Automation.WindowVisualState]::Normal) } catch {}
+      Start-Sleep -Milliseconds 400
+      $r0 = $main.Current.BoundingRectangle
+      if ($r0.X -gt -10000 -and -not $main.Current.IsOffscreen) { break }
+    }
+    write-host "* 主視窗尚未還原（第 $($try+1) 次），重試…" -ForegroundColor Yellow
+  }
   if (-not $main) { write-host "找不到主視窗（UIA）" -ForegroundColor Red; exit 1 }
+  if ($main.Current.BoundingRectangle.X -le -10000) { write-host "主視窗還原失敗（rect 仍在螢幕外）" -ForegroundColor Red; exit 1 }
   $btn = Find-ResultBtn $main
   if (-not $btn) { write-host "找不到功能列 Result 鈕（AutomationId=ResultBtn）" -ForegroundColor Red; exit 1 }
   $br = $btn.Current.BoundingRectangle
@@ -170,11 +182,12 @@ $startedByTest = $false
   #region C.態1：卡開啟中→按 Result 帶前景不新開 --------------------------------
   write-host "## C.態1：卡開啟中→按 Result 帶前景不新開 --------------------------------" -ForegroundColor Cyan
 
-  # 先點主視窗使卡失焦（#105 已保證不關卡）
+  # 先實體點主視窗使其為前景（#105 已保證不關卡）；按鈕改以 UIA InvokePattern 觸發——
+  # B 態已以實體點擊證明按鈕接線，C/D 驗「喚回行為」本身，Invoke 觸發可靠（避免 SendInput 偶發落空之假失敗）
   $mr = $main.Current.BoundingRectangle
   Invoke-ClickAt ([int]($mr.X + 150)) ([int]($mr.Y + $mr.Height - 15)) 1
   Start-Sleep -Milliseconds 800
-  Invoke-ClickAt ([int]($br.X + $br.Width/2)) ([int]($br.Y + $br.Height/2)) 1
+  ($btn.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()
   Start-Sleep -Milliseconds 1200
   $res = Find-AppWindow $appPid $ResultTitle
   $n = Count-AppWindows $appPid $ResultTitle
@@ -183,7 +196,8 @@ $startedByTest = $false
     write-host "* PASS：現有卡帶至前景、仍僅一張" -ForegroundColor Green
     Save-RegionShot (Join-Path $ShotDir "result-summon-coexist.png") @($main.Current.BoundingRectangle, $res.Current.BoundingRectangle)
   } else {
-    write-host "* FAIL：卡數=$n、前景是否結果卡=$([int64]$fg -eq [int64]$res.Current.NativeWindowHandle)" -ForegroundColor Red; $fail++
+    $fgIsCard = if ($res) { [int64]$fg -eq [int64]$res.Current.NativeWindowHandle } else { "(無卡)" }
+    write-host "* FAIL：卡數=$n、前景是否結果卡=$fgIsCard" -ForegroundColor Red; $fail++
   }
 
   #endregion
@@ -194,10 +208,10 @@ $startedByTest = $false
   $res = Find-AppWindow $appPid $ResultTitle
   [T41.Native]::ShowWindow([IntPtr][int64]$res.Current.NativeWindowHandle, 6) | Out-Null  # SW_MINIMIZE
   Start-Sleep -Milliseconds 800
-  # 最小化後前景未必回到主視窗——先點主視窗（狀態列）取得前景，再按 Result 鈕（貼近真實操作動線）
+  # 最小化後前景未必回到主視窗——先實體點主視窗（狀態列）取得前景，再以 InvokePattern 觸發 Result 鈕（同 C 態理由）
   Invoke-ClickAt ([int]($mr.X + 150)) ([int]($mr.Y + $mr.Height - 15)) 1
   Start-Sleep -Milliseconds 500
-  Invoke-ClickAt ([int]($br.X + $br.Width/2)) ([int]($br.Y + $br.Height/2)) 1
+  ($btn.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()
   Start-Sleep -Milliseconds 1500
   $res = Find-AppWindow $appPid $ResultTitle
   $state = ($res.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).Current.WindowVisualState
