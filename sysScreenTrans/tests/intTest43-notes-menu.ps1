@@ -168,11 +168,14 @@ try {
     $expect = @("No Color","Pink","Blue","Green","Yellow","Gray","Delete")
     $missing = @($expect | Where-Object { $n = $_; -not ($names | Where-Object { $_ -like "$n*" }) })
     $banned  = @($names | Where-Object { $_ -match "Play|View" })
-    if ($missing.Count -eq 0 -and $banned.Count -eq 0) {
-      write-host "* PASS：色塊七項齊備（No Color＋五色＋Delete）、無 Play/View" -ForegroundColor Green
+    # 排除視窗系統選單雜項（UIA 會多回一個「System」MenuItem）後驗項數與 Delete 居末
+    $real = @($names | Where-Object { $_ -ne "System" })
+    $countOk = ($real.Count -eq 7) -and ($real[-1] -eq "Delete")
+    if ($missing.Count -eq 0 -and $banned.Count -eq 0 -and $countOk) {
+      write-host "* PASS：色塊七項齊備（No Color＋五色＋Delete 居末）、無 Play/View" -ForegroundColor Green
       Save-ComposedShot (Join-Path $ShotDir "notes-menu-colors.png") $main $menu.Window
     } else {
-      write-host "* FAIL：缺項=$($missing -join ',')、違禁項=$($banned -join ',')" -ForegroundColor Red; $fail++
+      write-host "* FAIL：缺項=$($missing -join ',')、違禁項=$($banned -join ',')、項數/居末=$countOk" -ForegroundColor Red; $fail++
     }
   }
 
@@ -181,7 +184,8 @@ try {
   #region C.點色套底色落地 --------------------------------
   write-host "## C.點色套底色落地 --------------------------------" -ForegroundColor Cyan
 
-  $blue = $menu.Items | Where-Object { $_.Current.Name -like "Blue*" } | Select-Object -First 1
+  if (-not $menu) { write-host "* SKIP：§B 未開出選單，本節略過" -ForegroundColor Yellow; $fail++; $blue = $null }
+  else { $blue = $menu.Items | Where-Object { $_.Current.Name -like "Blue*" } | Select-Object -First 1 }
   if ($blue) {
     ($blue.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()
     Start-Sleep -Milliseconds 1000
@@ -189,6 +193,21 @@ try {
     $c = (($n2.Folders | Where-Object Name -eq $folder.Name).Entries | Where-Object Id -eq $entry.Id).Color
     if ($c -eq "#E1EFFB") { write-host "* PASS：點 Blue → notes.json Color=#E1EFFB 落地" -ForegroundColor Green }
     else { write-host "* FAIL：Color=$c（預期 #E1EFFB）" -ForegroundColor Red; $fail++ }
+    # 套色後重開選單：打勾應移至新色（§5 審查 B-4）
+    $texts2 = $main.FindAll([Windows.Automation.TreeScope]::Descendants,
+      (New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Text)))
+    $t2 = $null
+    foreach ($t in $texts2) { if ($t.Current.Name -like "$head*") { $t2 = $t; break } }
+    $r2 = $t2.Current.BoundingRectangle
+    Invoke-ClickAt ([int]($r2.X + $r2.Width/2)) ([int]($r2.Y + $r2.Height/2)) "R"
+    Start-Sleep -Milliseconds 1000
+    $menu2 = Get-OpenMenuItems $appPid
+    $blueChecked = $menu2 -and (@($menu2.Items | Where-Object { $_.Current.Name -like "Blue*✓*" }).Count -eq 1)
+    if ($blueChecked) { write-host "* PASS：重開選單後打勾移至 Blue" -ForegroundColor Green }
+    else { write-host "* FAIL：重開選單 Blue 未帶勾" -ForegroundColor Red; $fail++ }
+    [T43.Native]::SetCursorPos(5,5) | Out-Null
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}") # 關閉選單再進下一節
+    Start-Sleep -Milliseconds 500
   } else { write-host "* FAIL：選單無 Blue 項" -ForegroundColor Red; $fail++ }
 
   #endregion
