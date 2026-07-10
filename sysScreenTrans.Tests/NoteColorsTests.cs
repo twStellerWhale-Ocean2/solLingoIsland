@@ -10,9 +10,29 @@ public class NoteColorsTests
     [InlineData("Pink", "#FBE4EC")]
     [InlineData("Blue", "#E1EFFB")]
     [InlineData("  Green ", "#E4F5E9")] // 前後空白容錯
+    [InlineData("Violet", "#EEDBFF")]   // #109 新五色
+    [InlineData("Sky", "#B4EBFF")]
+    [InlineData("Mint", "#B8EDDE")]
+    [InlineData("Lime", "#D1EAC7")]
+    [InlineData("Orange", "#FFD9B8")]
     public void HexOfName_KnownName_ReturnsHex(string name, string hex)
     {
         Assert.Equal(hex, NoteColors.HexOfName(name));
+    }
+
+    [Fact]
+    public void Palette_TenColors_NamesAndHexesUnique() // #109：十色、名與 hex 皆不重複（防加色手滑）
+    {
+        Assert.Equal(10, NoteColors.Palette.Length);
+        Assert.Equal(10, NoteColors.Palette.Select(p => p.Name).Distinct().Count());
+        Assert.Equal(10, NoteColors.Palette.Select(p => p.Hex.ToUpperInvariant()).Distinct().Count());
+    }
+
+    [Fact]
+    public void NormalizeSuggested_NewColor_NameAndHex() // #109：AI 建議色認得新色名與新 hex
+    {
+        Assert.Equal("#B4EBFF", NoteColors.NormalizeSuggested("Sky"));
+        Assert.Equal("#ffd9b8", NoteColors.NormalizeSuggested("#ffd9b8"));
     }
 
     [Theory]

@@ -54,7 +54,8 @@
         <StackPanel Margin="0,8,0,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
-            <StackPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+            <!-- #109 十色（11 塊）：WrapPanel 換行——窗窄時全可視可點，不裁切 -->
+            <WrapPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center" MaxWidth="360"/>
           </StackPanel>
           <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
             <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>

@@ -6,7 +6,11 @@ namespace ScreenTrans.Query;
 /// </summary>
 public static class NoteColors
 {
-    /// <summary>粉彩盤（名稱＋hex）；空 hex／空名＝無底色（預設白）。Issue #75：去粉紫（同質性高）改淺灰。</summary>
+    /// <summary>
+    /// 粉彩盤（名稱＋hex）；空 hex／空名＝無底色（預設白）。Issue #75：去粉紫（同質性高）改淺灰。
+    /// Issue #109 擴為十色——新五色依量化驗收選定：任一涉新色配對 ΔE(Lab) ≥ 9（高於 #75 剔除案 7.58）、
+    /// L*≈89–90 同粉彩帶、對 #333 文字對比 ≥9.5:1、英文名首字母不撞（選單鍵盤跳選）。
+    /// </summary>
     public static readonly (string Name, string Hex)[] Palette =
     {
         ("Pink", "#FBE4EC"),
@@ -14,6 +18,11 @@ public static class NoteColors
         ("Green", "#E4F5E9"),
         ("Yellow", "#FBF3D9"),
         ("Gray", "#E9E9E9"),
+        ("Violet", "#EEDBFF"),
+        ("Sky", "#B4EBFF"),
+        ("Mint", "#B8EDDE"),
+        ("Lime", "#D1EAC7"),
+        ("Orange", "#FFD9B8"),
     };
 
     /// <summary>色名 → hex；未知名回空字串（＝無底色）。用於智能配色把 AI 回傳之色名對應到盤上色。</summary>

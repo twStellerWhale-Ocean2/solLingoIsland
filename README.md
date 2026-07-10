@@ -67,7 +67,9 @@
 
 ![我的筆記——每卡標示登記時間，A→Z／Z→A／Old→New／New→Old 四排序鈕（圖為 Old→New 排序後，v0.33.0）](docs/manual-assets/notes-time-sort.png)
 
-![筆記條目右鍵選單——直接選底色（目前色打勾）、最下方分隔線後 Delete（v0.34.0）](docs/manual-assets/notes-menu-colors.png)
+![筆記條目右鍵選單——直接選底色（十色、目前色打勾）、最下方分隔線後 Delete（v0.35.0）](docs/manual-assets/notes-menu-ten-colors.png)
+
+![查詢結果視窗底部「底色」列——十色一列全可視（v0.35.0）](docs/manual-assets/result-swatches-ten.png)
 
 ## 發音練習畫面（v0.31.0）
 
