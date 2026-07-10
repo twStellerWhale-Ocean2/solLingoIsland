@@ -8,27 +8,73 @@
         Background="{StaticResource PinkBg}"
         Width="560" Height="400" MinWidth="320" MinHeight="220"
         WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <!-- 導航圓鈕（複查回饋）：啟用＝粉底深字圓鈕、hover 加深；停用＝淡底淡字、無手形——明確區分可用/不可用 -->
+    <Style x:Key="NavButton" TargetType="Button">
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#6D3A4D"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="15" Background="#F4C2D0" BorderBrush="#E48CA8" BorderThickness="1.2">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#ECA6BC"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#D66C90"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Background" Value="#F6ECF0"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#EBDBE2"/>
+                <Setter Property="Foreground" Value="#DFCAD3"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <!-- Issue #59：改標準表單——標準標題列（OS 字型/標題）＋標準邊框拖拉縮放＋右下角縮放握把（ResizeMode=CanResizeWithGrip，#97）＋
        ShowInTaskbar=True（失焦後仍有工作列按鈕可尋、不再像被隱藏）。移除原自訂 WindowStyle=None 卡片、
        自訂標題列/關閉鈕/縮放握把（改由 OS 標準 chrome 提供）。字型比照主視窗（系統預設）。 -->
   <Grid>
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
     <!-- 浮水印底圖（兩位女孩，極淡、不擋點擊） -->
-    <Image Grid.Row="0" Grid.RowSpan="2" Source="pack://application:,,,/assets/icon.png"
+    <Image Grid.Row="0" Grid.RowSpan="3" Source="pack://application:,,,/assets/icon.png"
            Opacity="0.10" Stretch="Uniform" IsHitTestVisible="False"
            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
 
+    <!-- 頂部工具列（複查回饋）：往前/往後（單字查詢導航，快速返回原句）＋「加入至」資料夾（自底部上移） -->
+    <Grid Grid.Row="0">
+      <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
+      <StackPanel Orientation="Horizontal" Margin="14,8,16,8" VerticalAlignment="Center">
+        <Button x:Name="BackBtn" Style="{StaticResource NavButton}" Content="&#xE76B;" ToolTip="Back (return to previous)"/>
+        <Button x:Name="ForwardBtn" Style="{StaticResource NavButton}" Content="&#xE76C;" Margin="6,0,0,0" ToolTip="Forward"/>
+        <Button x:Name="EditBtn" Style="{StaticResource NavButton}" Content="&#xE70F;" Margin="16,0,0,0"
+                ToolTip="Edit the English text and re-translate"/>
+        <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="16,0,6,0"/>
+        <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="200" FontSize="12.5" VerticalAlignment="Center"/>
+      </StackPanel>
+    </Grid>
+
     <!-- 內容區：過長可捲動 -->
-    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
     </ScrollViewer>
 
-    <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記；下方為預設資料夾/底色（Issue #55） -->
-    <Grid Grid.Row="1">
+    <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記；下方為底色（Issue #55；#複查：資料夾下拉上移頂部） -->
+    <Grid Grid.Row="2">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
       <StackPanel Margin="16,10,16,12">
         <StackPanel Orientation="Horizontal">
@@ -50,18 +96,12 @@
           <CheckBox x:Name="AutoAddChk" Content="Auto-add to Notes" Margin="14,0,0,0"
                     VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
         </StackPanel>
-        <!-- #55/#93：拆為上下兩列——上＝底色色塊、下＝加入至資料夾（兼「設定預設」與「臨時調整」；智能配色下自動預選 AI 建議色） -->
-        <StackPanel Margin="0,8,0,0">
-          <!-- #109 十色（11 塊）：DockPanel 使 WrapPanel 取得「實際剩餘寬」而非無限寬（水平 StackPanel 內永不換行）——窗窄時換行全可視可點，不裁切 -->
-          <DockPanel>
-            <TextBlock DockPanel.Dock="Left" Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
-            <WrapPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
-          </DockPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-            <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
-            <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="180" FontSize="12.5" VerticalAlignment="Center"/>
-          </StackPanel>
-        </StackPanel>
+        <!-- #55：底色色塊列（加入至資料夾下拉已於 #複查 上移頂部工具列） -->
+        <!-- #109 十色（11 塊）：DockPanel 使 WrapPanel 取得「實際剩餘寬」而非無限寬——窗窄時換行全可視可點，不裁切 -->
+        <DockPanel Margin="0,8,0,0">
+          <TextBlock DockPanel.Dock="Left" Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
+          <WrapPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+        </DockPanel>
       </StackPanel>
     </Grid>
   </Grid>
