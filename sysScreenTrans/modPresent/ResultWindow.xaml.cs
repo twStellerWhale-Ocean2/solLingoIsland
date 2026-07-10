@@ -77,6 +77,16 @@ public partial class ResultWindow : Window
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
         AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
 
+        // 失焦自動隱藏（#複查，選項可開）：預設關＝維持 #105（點主視窗不隱藏）；開啟後點到他窗即隱藏、下次查詢再現。
+        // 單字查詢/重譯進行中（_wordBusy）不隱藏，免等待中內容突然消失。
+        Deactivated += (_, _) =>
+        {
+            if (ResultDisplaySettings.HideOnBlur && !_closing && !_wordBusy)
+            {
+                Hide();
+            }
+        };
+
         _currentColor = NoteDefaults.ColorHex; // 預設底色（#55）
         FolderCombo.SelectionChanged += OnFolderChanged;
         BuildSwatches();

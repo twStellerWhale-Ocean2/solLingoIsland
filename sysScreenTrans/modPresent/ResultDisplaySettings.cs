@@ -16,9 +16,16 @@ public static class ResultDisplaySettings
     /// <summary>中譯字級（基準−2，下限 12）。</summary>
     public static double TranslationSize => System.Math.Max(12, FontSize - 2);
 
+    /// <summary>
+    /// 查詢視窗失去焦點時是否自動隱藏（#複查）。預設 false＝維持 #105 行為（點主視窗不隱藏）；
+    /// 勾選後點到其他視窗即自動隱藏、下次查詢再現。<see cref="ResultWindow"/> 於 Deactivated 時讀取。
+    /// </summary>
+    public static bool HideOnBlur { get; set; }
+
     /// <summary>自 AppConfig 同步（啟動與設定儲存後由 App 呼叫）。</summary>
     public static void SyncFrom(AppConfig c)
     {
         FontSize = c.ResultFontSize is >= 14 and <= 48 ? c.ResultFontSize : AppConfig.DefaultResultFontSize;
+        HideOnBlur = c.ResultHideOnBlur;
     }
 }

@@ -79,6 +79,7 @@ public partial class OptionsPage : UserControl
         EntryFontBox.Text = ((int)c.EntryFontSize).ToString();
         EntryBoldChk.IsChecked = c.EntryBold;
         EntryWrapChk.IsChecked = c.EntryWrap;
+        ResultHideOnBlurChk.IsChecked = c.ResultHideOnBlur; // 查詢視窗失焦自動隱藏（#複查）
         ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
         ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
@@ -222,7 +223,8 @@ public partial class OptionsPage : UserControl
         EntryFontSlider.Value,          // 條目字級（#複查）
         EntryBoldChk.IsChecked == true, // 條目粗體
         EntryWrapChk.IsChecked == true, // 條目自動換行
-        ResultFontSlider.Value);        // 查詢視窗基準字級（#複查）
+        ResultFontSlider.Value,          // 查詢視窗基準字級（#複查）
+        ResultHideOnBlurChk.IsChecked == true); // 查詢視窗失焦自動隱藏（#複查）
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
     private void SyncThresholdFromBox()
