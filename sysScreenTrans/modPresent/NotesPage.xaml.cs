@@ -492,9 +492,10 @@ public partial class NotesPage : UserControl
     {
         var card = new Border
         {
-            // #111：通過卡星紋底（導出態＝最佳分≥門檻；未通過素色）——底刷單一來源 NoteCardBrush
+            // #111→#118：通過卡透明底（透浮水印；導出態＝最佳分≥門檻）、未過素色；
+            // 未選框＝底色×0.80 加深（#118、色彩身份延伸）——底刷/框刷單一來源 NoteCardBrush
             Background = NoteCardBrush.For(entry.Color, entry.PracticeScore >= _threshold()),
-            BorderBrush = Brush(CardSelector.IdleBorder),
+            BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(8, 10, 10, 10),
