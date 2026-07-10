@@ -450,4 +450,50 @@ public class AppConfigTests
         }
         finally { File.Delete(path); }
     }
+
+    // ---- 條目/查詢視窗顯示偏好（複查回饋：選項頁可調，須持久化）----
+
+    [Fact]
+    public void Load_MissingDisplayKeys_AppliesDefaults()
+    {
+        // 舊 appsettings 無顯示鍵 → 條目 18/粗體/不換行、查詢視窗 28、不失焦隱藏（維持 #105）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(18, cfg.EntryFontSize);
+            Assert.True(cfg.EntryBold);
+            Assert.False(cfg.EntryWrap);
+            Assert.Equal(28, cfg.ResultFontSize);
+            Assert.False(cfg.ResultHideOnBlur);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_DisplayFields()
+    {
+        // 選項頁改動須寫回設定檔並讀回（先前只在 Gather 帶入、重啟即失的回歸防護）
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+L", 200, "", 80, "gpt-audio-1.5",
+                EntryFontSize: 24, EntryBold: false, EntryWrap: true,
+                ResultFontSize: 34, ResultHideOnBlur: true).Save(path);
+            var json = File.ReadAllText(path);
+            Assert.Contains("paramEntryFontSize", json);
+            Assert.Contains("paramEntryBold", json);
+            Assert.Contains("paramEntryWrap", json);
+            Assert.Contains("paramResultFontSize", json);
+            Assert.Contains("paramResultHideOnBlur", json);
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(24, cfg.EntryFontSize);
+            Assert.False(cfg.EntryBold);   // 明確 false 須被讀回（缺欄才預設 true）
+            Assert.True(cfg.EntryWrap);
+            Assert.Equal(34, cfg.ResultFontSize);
+            Assert.True(cfg.ResultHideOnBlur);
+        }
+        finally { File.Delete(path); }
+    }
 }

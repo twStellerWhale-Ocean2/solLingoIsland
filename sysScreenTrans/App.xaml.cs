@@ -411,8 +411,12 @@ public partial class App : System.Windows.Application
     /// </summary>
     private void SummonResult()
     {
-        if (_result is not null)
+        if (_result is not null && !_result.IsClosing)
         {
+            if (!_result.IsVisible)
+            {
+                _result.Show(); // 失焦自動隱藏（#複查）後喚回：Hidden 視窗須先 Show，Activate 不會使其重現
+            }
             if (_result.WindowState == WindowState.Minimized)
             {
                 _result.WindowState = WindowState.Normal;
