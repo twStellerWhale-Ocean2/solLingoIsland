@@ -32,6 +32,32 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- 動作鈕（非分頁、不入分頁群組）：功能列右端 Result 喚回結果卡（Issue #107）；視覺同 TabButton、無選取態 -->
+    <Style x:Key="ActionButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="8,7" Width="78">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                           Foreground="{StaticResource PinkText}" HorizontalAlignment="Center"/>
+                <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0"
+                                  TextElement.FontSize="11.5" TextElement.Foreground="#8A5A6D"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkTint}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkAccent}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <Grid>
@@ -55,6 +81,9 @@
           <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
           <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="About"/>
         </StackPanel>
+        <!-- 喚回結果卡動作鈕（Issue #107）：MDL2 E8A7 OpenInNewWindow -->
+        <Button x:Name="ResultBtn" Style="{StaticResource ActionButton}" Tag="&#xE8A7;" Content="Result"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,6"/>
         <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
       </Grid>
 

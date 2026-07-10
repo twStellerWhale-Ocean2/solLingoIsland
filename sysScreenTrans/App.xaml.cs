@@ -71,6 +71,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Open Main Window", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("Result", null, (_, _) => SummonResult()); // 喚回結果卡（Issue #107：與主視窗 Result 鈕兩入口鏡像）
         menu.Items.Add("Query History", null, (_, _) => OpenMain(MainTab.History));
         menu.Items.Add("My Notes", null, (_, _) => OpenMain(MainTab.Notes));
         menu.Items.Add("Context", null, (_, _) => OpenMain(MainTab.Context));
@@ -107,6 +108,7 @@ public partial class App : System.Windows.Application
 
         _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
+        _main.ResultRequested += SummonResult; // 功能列 Result 鈕（Issue #107）
         // 主視窗取得焦點不關結果卡片（Issue #105：與主視窗共存，關閉時機僅限使用者關閉／新查詢或檢視取代／選項儲存重建）
         _main.WindowState = WindowState.Minimized;
         _main.Show();
@@ -293,6 +295,31 @@ public partial class App : System.Windows.Application
         win.Show();
         win.Activate();
         win.ShowResult(r, _speech!);
+    }
+
+    /// <summary>
+    /// 喚回查詢結果視窗（Issue #107；主視窗 Result 鈕與 tray「Result」項兩入口鏡像）三態：
+    /// 現有卡（含最小化中）→先還原再帶前景（不新開）；無卡且有查詢歷史→以最新一筆走「檢視」路徑重開（單一守衛）；
+    /// 無任何歷史（含清除全部後、歷史檔毀損退空）→toast 提示、不開卡。喚回語意＝重開最新查詢、非最後顯示內容。
+    /// </summary>
+    private void SummonResult()
+    {
+        if (_result is not null)
+        {
+            if (_result.WindowState == WindowState.Minimized)
+            {
+                _result.WindowState = WindowState.Normal;
+            }
+            _result.Activate();
+            return;
+        }
+        var latest = _historyStore.Load().FirstOrDefault();
+        if (latest is null)
+        {
+            ToastNotifier.Show("No query result yet");
+            return;
+        }
+        ShowDetail(latest.ToResult());
     }
 
     /// <summary>選項分頁儲存後套用：重建語音服務、重註冊熱鍵、更新狀態；關前一結果視窗（不續用已釋放服務）。</summary>
