@@ -40,6 +40,7 @@ write-host "# II.參考準備 ================================" -ForegroundColor
 [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 '@ -Name Native -Namespace T40
   [T40.Native]::SetProcessDPIAware() | Out-Null
 
@@ -75,7 +76,7 @@ write-host "# II.參考準備 ================================" -ForegroundColor
     return [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, $cond).Count
   }
 
-  # 區域截圖存檔（只截受測視窗聯集、不入使用者桌面其他內容）
+  # 區域截圖存檔：底色填滿聯集框，僅拷貝受測視窗矩形——確實不入使用者桌面其他內容
   function Save-RegionShot([string]$Path, [System.Windows.Rect[]]$Rects, [int]$Margin = 16) {
     $x0 = [int](($Rects | ForEach-Object { $_.X } | Measure-Object -Minimum).Minimum) - $Margin
     $y0 = [int](($Rects | ForEach-Object { $_.Y } | Measure-Object -Minimum).Minimum) - $Margin
@@ -83,9 +84,15 @@ write-host "# II.參考準備 ================================" -ForegroundColor
     $y1 = [int](($Rects | ForEach-Object { $_.Y + $_.Height } | Measure-Object -Maximum).Maximum) + $Margin
     $bmp = New-Object System.Drawing.Bitmap(($x1 - $x0), ($y1 - $y0))
     $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.CopyFromScreen($x0, $y0, 0, 0, $bmp.Size)
+    $g.Clear([System.Drawing.Color]::FromArgb(238, 236, 233))
+    foreach ($r in $Rects) {
+      # UIA 矩形含 DWM 隱形縮放邊框（左右下約 7px），內縮避免滲入背景
+      $ix = [int]$r.X + 8; $iy = [int]$r.Y + 1
+      $iw = [int]$r.Width - 16; $ih = [int]$r.Height - 9
+      $g.CopyFromScreen($ix, $iy, ($ix - $x0), ($iy - $y0), (New-Object System.Drawing.Size($iw, $ih)))
+    }
     $g.Dispose(); $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-    write-host "* 截圖：$Path（$x0,$y0 → $x1,$y1）"
+    write-host "* 截圖：$Path（$x0,$y0 → $x1,$y1，背景已遮蔽）"
   }
 
   #endregion
@@ -154,9 +161,22 @@ $startedByTest = $false
   write-host "## C.點主視窗→結果卡須保留（Issue #105 主斷言） --------------------------------" -ForegroundColor Cyan
 
   $mr = $main.Current.BoundingRectangle
-  write-host "* 點選主視窗標題列（使主視窗 Activated）"
-  Invoke-ClickAt ([int]($mr.X + 220)) ([int]($mr.Y + 14)) 1
+  $rw = (Find-AppWindow $appPid $ResultTitle).Current.BoundingRectangle
+  # 取主視窗內、且不被 Topmost 結果卡覆蓋之點（候選：狀態列左端→左緣中段→標題列左端）
+  $pts = @(
+    @([int]($mr.X + 150), [int]($mr.Y + $mr.Height - 15)),
+    @([int]($mr.X + 20),  [int]($mr.Y + $mr.Height * 0.5)),
+    @([int]($mr.X + 120), [int]($mr.Y + 14)))
+  $pt = $pts | Where-Object { $_[0] -lt $rw.X -or $_[0] -gt ($rw.X + $rw.Width) -or $_[1] -lt $rw.Y -or $_[1] -gt ($rw.Y + $rw.Height) } | Select-Object -First 1
+  if (-not $pt) { write-host "找不到未被結果卡覆蓋之主視窗點擊點（請挪動視窗後重跑）" -ForegroundColor Red; exit 1 }
+  write-host "* 點選主視窗（$($pt[0]),$($pt[1])）使其 Activated"
+  Invoke-ClickAt $pt[0] $pt[1] 1
   Start-Sleep -Milliseconds 1200
+  $fg = [T40.Native]::GetForegroundWindow()
+  if ([int64]$fg -ne [int64]$main.Current.NativeWindowHandle) {
+    write-host "前置失真：點擊後前景視窗非主視窗（測試無效，重跑或檢查視窗位置）" -ForegroundColor Red; exit 1
+  }
+  write-host "* 已確認主視窗為前景（Activated 確實發生）"
   $resWin = Find-AppWindow $appPid $ResultTitle
   if ($resWin) {
     write-host "* PASS：點主視窗後結果視窗保留、未被自動關閉" -ForegroundColor Green
