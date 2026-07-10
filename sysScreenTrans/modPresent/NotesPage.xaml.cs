@@ -492,9 +492,10 @@ public partial class NotesPage : UserControl
     {
         var card = new Border
         {
-            // #111：通過卡星紋底（導出態＝最佳分≥門檻；未通過素色）——底刷單一來源 NoteCardBrush
+            // #111→#118：通過卡透明底（透浮水印；導出態＝最佳分≥門檻）、未過素色；
+            // 未選框＝底色×0.80 加深（#118、色彩身份延伸）——底刷/框刷單一來源 NoteCardBrush
             Background = NoteCardBrush.For(entry.Color, entry.PracticeScore >= _threshold()),
-            BorderBrush = Brush(CardSelector.IdleBorder),
+            BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(8, 10, 10, 10),
@@ -600,7 +601,7 @@ public partial class NotesPage : UserControl
     private const string MicRecFg = "#D64545", MicRecBg = "#FCE4E4", MicRecBorder = "#D64545";
 
     /// <summary>一張筆記卡之發音練習元件繫結（麥克風鈕＋成績框＋條目＋卡片）；供指標事件回查對應成績框，
-    /// 卡片參照供評分達標當下就地點亮星紋底（#111）。</summary>
+    /// 卡片參照供評分達標當下就地點亮（#111 星紋→#118 透明底）。</summary>
     private sealed class PracticeCell
     {
         public required NoteEntry Entry { get; init; }
@@ -752,7 +753,7 @@ public partial class NotesPage : UserControl
             if (IsBoxLive(cell.Box))
             {
                 cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
-                // #111：達標當下就地點亮星紋底——判定用 store 現值（cell.Entry 為 record 舊值快照，誤用即首次通過漏亮）
+                // #111→#118：達標當下就地點亮（底改透明透浮水印）——判定用 store 現值（cell.Entry 為 record 舊值快照，誤用即首次通過漏亮）
                 cell.Card.Background = NoteCardBrush.For(cell.Entry.Color, CurrentScore(cell.Entry.Id) >= threshold);
             }
             else
