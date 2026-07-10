@@ -15,20 +15,23 @@ namespace ScreenTrans.Present;
 /// </summary>
 public static class NoteCardBrush
 {
-    /// <summary>外框加深係數（#118 定本）：白 ×0.80＝`#CCCCCC` 精確、十色 ΔL*≈15–20「略加深」。</summary>
-    public const double DarkenFactor = 0.80;
+    /// <summary>外框加深係數（#123：#118 之 0.80「識別性太淺」→ 0.62 更明顯；白 ×0.62＝`#9E9E9E`、十色 ΔL*≈30 清楚可辨）。</summary>
+    public const double DarkenFactor = 0.62;
 
-    /// <summary>暗色計算（純函式可測）：各通道 ×0.80、截斷取整。</summary>
+    /// <summary>暗色計算（純函式可測）：各通道 ×<see cref="DarkenFactor"/>、截斷取整。</summary>
     public static (byte R, byte G, byte B) Darken(byte r, byte g, byte b) =>
         ((byte)(r * DarkenFactor), (byte)(g * DarkenFactor), (byte)(b * DarkenFactor));
 
     private static readonly Dictionary<string, Brush> BaseCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Brush> BorderCache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>卡片底刷：通過＝Transparent（透浮水印）、未通過＝素色。無效/空 hex 退白。</summary>
-    public static Brush For(string? colorHex, bool passed)
+    /// <summary>
+    /// 卡片底刷：通過且 <paramref name="passedTransparent"/>＝Transparent（透浮水印）、否則素色。無效/空 hex 退白。
+    /// <paramref name="passedTransparent"/>（#123 選項頁可關）為 false 時，通過卡維持素底、不透明。
+    /// </summary>
+    public static Brush For(string? colorHex, bool passed, bool passedTransparent = true)
     {
-        if (passed)
+        if (passed && passedTransparent)
         {
             return Brushes.Transparent; // 系統刷已 Frozen；非 null、卡片仍可點選/拖曳命中
         }
