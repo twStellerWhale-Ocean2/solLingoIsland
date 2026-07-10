@@ -589,7 +589,7 @@ public partial class NotesPage : UserControl
 
         card.Child = grid;
         card.Tag = entry;
-        card.ContextMenu = MakeEntryMenu(entry);
+        card.ContextMenu = MakeEntryMenu(entry, card);
         card.ToolTip = "Double-click to view; right-click for color / delete"; // View 項移除後之可發現性提示（#106 §G）
         card.MouseLeftButtonDown += (_, e) =>
         {
@@ -847,19 +847,14 @@ public partial class NotesPage : UserControl
     /// 條目右鍵選單（Issue #106 收斂為單層）：色塊選項平鋪（No Color＋粉彩盤、目前色打勾）＋分隔線＋ Delete。
     /// 播音走行尾鈕、檢視走雙擊，不再入選單（原 ▶ Play／View／Color ▸ 子選單制廢止）。
     /// </summary>
-    private ContextMenu MakeEntryMenu(NoteEntry entry)
+    private ContextMenu MakeEntryMenu(NoteEntry entry, Border card)
     {
         var menu = new ContextMenu();
 
         // 編輯原文（複查回饋：辨識有誤時校正、自動重譯更新中文）
+        // 直接捕捉 card；MenuItem.Parent 對 ContextMenu 頂層項常回 null，不可靠。
         var edit = new MenuItem { Header = "Edit text" };
-        edit.Click += (s, _) =>
-        {
-            if ((s as MenuItem)?.Parent is ContextMenu cm && cm.PlacementTarget is Border card)
-            {
-                BeginEntryEdit(card, entry);
-            }
-        };
+        edit.Click += (_, _) => BeginEntryEdit(card, entry);
         menu.Items.Add(edit);
         menu.Items.Add(new Separator());
 

@@ -198,7 +198,7 @@ public partial class HistoryPage : UserControl
 
         card.Child = grid;
         card.Tag = entry;
-        card.ContextMenu = MakeEntryMenu(entry);
+        card.ContextMenu = MakeEntryMenu(entry, card);
         card.MouseLeftButtonDown += (_, e) =>
         {
             _selector.Select(card); // 單擊即選取（#110）
@@ -212,7 +212,7 @@ public partial class HistoryPage : UserControl
     }
 
     // 右鍵選單（Issue #77，比照筆記；差異：以「加入筆記」取代筆記之「底色」、無移動）
-    private ContextMenu MakeEntryMenu(HistoryEntry entry)
+    private ContextMenu MakeEntryMenu(HistoryEntry entry, Border card)
     {
         var menu = new ContextMenu();
         var play = new MenuItem { Header = "▶ Play", Foreground = Brush("#2F6FED") };
@@ -220,13 +220,8 @@ public partial class HistoryPage : UserControl
         var view = new MenuItem { Header = "View" };
         view.Click += (_, _) => ViewRequested?.Invoke(entry);
         var edit = new MenuItem { Header = "Edit text" }; // 複查回饋：校正原文→自動重譯更新中文
-        edit.Click += (s, _) =>
-        {
-            if ((s as MenuItem)?.Parent is ContextMenu cm && cm.PlacementTarget is Border card)
-            {
-                BeginEntryEdit(card, entry);
-            }
-        };
+        // 直接捕捉 card；MenuItem.Parent 對 ContextMenu 頂層項常回 null，不可靠。
+        edit.Click += (_, _) => BeginEntryEdit(card, entry);
         var addNote = new MenuItem { Header = "Add to Notes", Foreground = Brush("#2F6F4A") };
         addNote.Click += (_, _) => AddToNotesRequested?.Invoke(entry);
         var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
