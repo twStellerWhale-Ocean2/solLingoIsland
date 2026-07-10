@@ -91,8 +91,12 @@ public partial class HistoryPage : UserControl
 
     private void OnDateChanged(object? sender, SelectionChangedEventArgs e) => RenderSelected();
 
+    // 單擊選取（Issue #110，同筆記款；共用 CardSelector）：單選、僅視覺回饋；框厚恆定 2px 只換色。
+    private readonly CardSelector _selector = new();
+
     private void RenderSelected()
     {
+        _selector.Clear(); // 重繪/切日即清選取（#110）
         EntryPanel.Children.Clear();
         if ((DateList.SelectedItem as ListBoxItem)?.Tag is not DateGroup g)
         {
@@ -136,12 +140,13 @@ public partial class HistoryPage : UserControl
         var card = new Border
         {
             Background = Brush("#FFFFFF"),
-            BorderBrush = Brush("#F4C2D0"),
-            BorderThickness = new Thickness(1),
+            BorderBrush = Brush(CardSelector.IdleBorder),
+            BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(0, 0, 0, 5),
         };
+        card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵亦設選取（#110）
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 原文
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 時刻
@@ -150,7 +155,7 @@ public partial class HistoryPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(No English text detected)" : entry.Original,
-            FontSize = 13.5,
+            FontSize = 15.5, // #110 加大字
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
@@ -161,7 +166,7 @@ public partial class HistoryPage : UserControl
         var time = new TextBlock
         {
             Text = entry.Timestamp.ToLocalTime().ToString("HH:mm"),
-            FontSize = 11,
+            FontSize = 12, // #110 加大字
             Foreground = Brush("#9A6A82"),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
@@ -193,6 +198,7 @@ public partial class HistoryPage : UserControl
         card.ContextMenu = MakeEntryMenu(entry);
         card.MouseLeftButtonDown += (_, e) =>
         {
+            _selector.Select(card); // 單擊即選取（#110）
             if (e.ClickCount == 2) // 雙擊＝檢視（比照筆記）
             {
                 ViewRequested?.Invoke(entry);
