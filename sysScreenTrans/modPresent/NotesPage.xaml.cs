@@ -240,6 +240,7 @@ public partial class NotesPage : UserControl
     private void RenderFolder()
     {
         CancelActivePractice(); // 重建卡片前收束進行中的錄音，免舊卡卸離後錄音器/計時器外洩、麥克風卡紅（§5 #1）
+        _selectedCard = null;   // 重繪/切夾即清選取（#110，不持久化）
         EntryPanel.Children.Clear();
         var f = Selected;
         bool any = f is not null && f.Entries.Count > 0;
@@ -483,6 +484,23 @@ public partial class NotesPage : UserControl
 
     // ---- 條目版型與排序（拖曳中顯示插入位置指示線，Issue #38） ----
 
+    // 單擊選取（Issue #110）：每頁單選、僅視覺回饋（不掛行為）；框厚恆定 2px 只換色（未選淡粉/選中深粉）、不跳版。
+    private Border? _selectedCard;
+
+    private void SelectCard(Border card)
+    {
+        if (ReferenceEquals(_selectedCard, card))
+        {
+            return;
+        }
+        if (_selectedCard is not null)
+        {
+            _selectedCard.BorderBrush = Brush("#F4C2D0");
+        }
+        _selectedCard = card;
+        card.BorderBrush = Brush("#B0578D");
+    }
+
     // 條目卡（Issue #44）：底色套 NoteEntry.Color；操作循 Windows 清單慣例——右鍵選單＋雙擊檢視、無常駐按鈕列。
     private UIElement EntryRow(NoteEntry entry)
     {
@@ -490,12 +508,13 @@ public partial class NotesPage : UserControl
         {
             Background = SafeBrush(entry.Color, "#FFFFFF"),
             BorderBrush = Brush("#F4C2D0"),
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(8, 10, 10, 10),
             Margin = new Thickness(0, 0, 0, 8),
             AllowDrop = true, // 事件交由 EntryPanel 統一處理（冒泡），卡片僅作為有效放置目標
         };
+        card.MouseRightButtonDown += (_, _) => SelectCard(card); // 右鍵開選單亦設選取（Windows 慣例，#110）
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -523,7 +542,7 @@ public partial class NotesPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(no content)" : entry.Original,
-            FontSize = 14,
+            FontSize = 16, // #110 加大字
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
@@ -537,7 +556,7 @@ public partial class NotesPage : UserControl
             textStack.Children.Add(new TextBlock
             {
                 Text = local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
-                FontSize = 10.5,
+                FontSize = 11.5, // #110 加大字
                 Foreground = Brush("#8A5A6D"), // 沿系統既有次要文字色（對比達標；§5 審查 #3）
                 Margin = new Thickness(0, 2, 0, 0),
                 ToolTip = local.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
@@ -579,6 +598,7 @@ public partial class NotesPage : UserControl
         card.ToolTip = "Double-click to view; right-click for color / delete"; // View 項移除後之可發現性提示（#106 §G）
         card.MouseLeftButtonDown += (_, e) =>
         {
+            SelectCard(card); // 單擊即選取（#110；不設 Handled——雙擊首擊選取、再擊開檢視）
             if (e.ClickCount == 2) // 雙擊＝檢視（Windows 清單慣例）
             {
                 ViewRequested?.Invoke(entry);

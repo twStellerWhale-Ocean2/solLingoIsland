@@ -69,6 +69,8 @@
 
 ![筆記條目右鍵選單——直接選底色（十色、目前色打勾）、最下方分隔線後 Delete（v0.35.0）](docs/manual-assets/notes-menu-ten-colors.png)
 
+![條目點一下即選取——選中卡深粉框標示（筆記/歷史同款，v0.36.0）](docs/manual-assets/notes-entry-selected.png)
+
 ![查詢結果視窗底部「底色」列——十色一列全可視（v0.35.0）](docs/manual-assets/result-swatches-ten.png)
 
 ## 發音練習畫面（v0.31.0）
