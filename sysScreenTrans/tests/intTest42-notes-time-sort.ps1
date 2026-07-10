@@ -120,13 +120,16 @@ try {
   #region A.啟動與定位 --------------------------------
   write-host "## A.啟動與定位 --------------------------------" -ForegroundColor Cyan
 
-  $proc = Get-Process ScreenTrans -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $proc) {
-    write-host "* 啟動受測程式（Release build）"
-    $proc = Start-Process $ExePath -PassThru
-    $startedByTest = $true
-    Start-Sleep 4
-  } else { write-host "* 沿用執行中之 ScreenTrans（pid $($proc.Id)）" }
+  # 本測試改動並還原 notes.json——沿用既有實例時 app 記憶體殘留排序後順序、之後任一次 Save 會覆寫還原檔（§5 審查 #1），
+  # 故一律要求以測試自啟實例執行
+  if (Get-Process ScreenTrans -ErrorAction SilentlyContinue) {
+    Copy-Item $backupPath $notesPath -Force; Remove-Item $backupPath -Force
+    write-host "偵測到執行中之 ScreenTrans——請先結束後重跑（本測試需自啟實例以保證資料還原不留痕）" -ForegroundColor Red; exit 1
+  }
+  write-host "* 啟動受測程式（Release build）"
+  $proc = Start-Process $ExePath -PassThru
+  $startedByTest = $true
+  Start-Sleep 4
   $appPid = $proc.Id
 
   $main = $null
@@ -179,6 +182,8 @@ try {
   $ids = Read-FolderIds $folder.Name
   if (($ids -join ",") -eq ($ascExpected -join ",")) {
     write-host "* PASS：Old→New 後 notes.json 順序＝依 AddedAt 舊→新" -ForegroundColor Green
+    [T42.Native]::SetCursorPos(5, 5) | Out-Null  # 移開游標免鈕面殘留 hover 態入鏡（§5 審查 #4）
+    Start-Sleep -Milliseconds 400
     Save-WindowShot (Join-Path $ShotDir "notes-time-sort.png") $main
   } else {
     write-host "* FAIL：預期 $($ascExpected -join ',')、實得 $($ids -join ',')" -ForegroundColor Red; $fail++
@@ -197,6 +202,22 @@ try {
   } else {
     write-host "* FAIL：預期 $($descExpected -join ',')、實得 $($ids -join ',')" -ForegroundColor Red; $fail++
   }
+
+  #endregion
+
+  #region E.最小寬換行：560px 下五鈕全可視 --------------------------------
+  write-host "## E.最小寬換行：560px 下五鈕全可視 --------------------------------" -ForegroundColor Cyan
+
+  Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int X, int Y, int W, int H, bool r);' -Name Native2 -Namespace T42b
+  [T42b.Native2]::MoveWindow((Get-Process -Id $appPid).MainWindowHandle, 100, 100, 560, 500, $true) | Out-Null
+  Start-Sleep -Milliseconds 800
+  $offCount = 0
+  foreach ($id in @("SortAscBtn","SortDescBtn","SortOldBtn","SortNewBtn","ClearPracticeBtn")) {
+    $b = Find-ById $main $id
+    if (-not $b -or $b.Current.IsOffscreen) { $offCount++; write-host "* $id 不可視" -ForegroundColor Red }
+  }
+  if ($offCount -eq 0) { write-host "* PASS：560px（MinWidth）下五鈕換行全可視（invariant）" -ForegroundColor Green }
+  else { write-host "* FAIL：$offCount 顆鈕不可視" -ForegroundColor Red; $fail++ }
 
   #endregion
 

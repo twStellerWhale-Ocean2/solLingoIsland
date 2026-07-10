@@ -538,7 +538,7 @@ public partial class NotesPage : UserControl
             {
                 Text = local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
                 FontSize = 10.5,
-                Foreground = Brush("#A88796"),
+                Foreground = Brush("#8A5A6D"), // 沿系統既有次要文字色（對比達標；§5 審查 #3）
                 Margin = new Thickness(0, 2, 0, 0),
                 ToolTip = local.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
             });
