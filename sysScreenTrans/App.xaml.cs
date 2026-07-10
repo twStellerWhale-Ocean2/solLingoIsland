@@ -244,8 +244,27 @@ public partial class App : System.Windows.Application
         _result = win;
         win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
         win.AddToNotesRequested += AddToNotes;
+        win.WordQueryRequested += word => _ = LookupWordAsync(win, word); // 複查回饋：點單字＝查該字
         win.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
         return win;
+    }
+
+    /// <summary>單字查詢（複查回饋：結果視窗點單字）：文字查該字義→推入該視窗導航堆疊（可往前返回原句）；失敗以 toast 明訊、不破壞現有結果。</summary>
+    private async Task LookupWordAsync(ResultWindow win, string word)
+    {
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            var result = await query.QueryWordAsync(word);
+            if (ReferenceEquals(_result, win)) // 視窗未被取代才回填
+            {
+                win.PushWordResult(result);
+            }
+        }
+        catch (QueryException ex)
+        {
+            ToastNotifier.Show("Word lookup failed: " + ex.Message);
+        }
     }
 
     /// <summary>目前頂層資料夾名清單（供結果視窗「加入至」下拉，#55）。</summary>

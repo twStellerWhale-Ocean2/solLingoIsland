@@ -143,7 +143,7 @@ public partial class HistoryPage : UserControl
             BorderBrush = Brush(CardSelector.IdleBorder),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(10, 6, 10, 6),
+            Padding = new Thickness(10, 3, 10, 3), // #複查：內距縮小、免浪費空間（原 6 上下）
             Margin = new Thickness(0, 0, 0, 5),
         };
         card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵亦設選取（#110）
@@ -155,7 +155,8 @@ public partial class HistoryPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(No English text detected)" : entry.Original,
-            FontSize = 15.5, // #110 加大字
+            FontSize = 28, // #複查：與查詢結果視窗英文原文同大並加粗（原 #110 之 15.5）
+            FontWeight = System.Windows.FontWeights.SemiBold,
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,

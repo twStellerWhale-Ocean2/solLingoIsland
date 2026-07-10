@@ -51,6 +51,13 @@ public partial class ResultWindow : Window
     /// <summary>按「加入我的筆記」或勾選「自動加入筆記」時觸發（傳加入請求：結果＋目標夾＋底色，#55）。</summary>
     public event Action<NoteAddRequest>? AddToNotesRequested;
 
+    /// <summary>點擊結果中英文單字時觸發（複查回饋：查該單字，非發音）；App 跑 QueryWordAsync 後以 <see cref="PushWordResult"/> 回填。</summary>
+    public event Action<string>? WordQueryRequested;
+
+    // 導航堆疊（複查回饋）：主查詢＝reset 為單一，查單字＝push，往前/往後在堆疊內移動、不重查亦不自動加入筆記
+    private readonly List<QueryResult> _history = new();
+    private int _pos = -1;
+
     public ResultWindow()
     {
         InitializeComponent();
@@ -58,6 +65,9 @@ public partial class ResultWindow : Window
         ApplyBounds();
         // 移動/縮放/關閉皆由 OS 標準 chrome 提供（Issue #59），不再自訂 HeaderBar 拖曳/Thumb 握把/關閉鈕。
         AddNoteBtn.Click += (_, _) => RaiseAdd();
+        BackBtn.Click += (_, _) => Navigate(-1);
+        ForwardBtn.Click += (_, _) => Navigate(1);
+        UpdateNav();
         AutoAddChk.IsChecked = AutoAddSettings.Enabled;
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
         AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
@@ -262,9 +272,68 @@ public partial class ResultWindow : Window
         });
     }
 
+    /// <summary>主查詢結果（螢幕框選/雙擊）：重置導航堆疊、渲染、依設定自動播放與自動加入筆記。</summary>
     public void ShowResult(QueryResult r, ISpeechService speech)
     {
         _speech = speech;
+        _history.Clear();
+        _history.Add(r);
+        _pos = 0;
+        Render(r);
+        UpdateNav();
+
+        // 自動播放（勾選後框選完即播）：兩者皆勾則英文先、中文接續。僅主查詢自動播放，單字查詢/導航不自動播。
+        if (!r.IsEmpty && AutoPlaySettings.English)
+        {
+            speech.Speak(r.Original, "en-US", stopPrevious: true);
+        }
+        if (!r.IsEmpty && AutoPlaySettings.Chinese)
+        {
+            speech.Speak(r.Translation, "zh-TW", stopPrevious: !AutoPlaySettings.English);
+        }
+
+        // 自動加入筆記（Issue #34）：**僅主查詢**（螢幕轉換為主）自動去重收藏；單字查詢（PushWordResult）不自動加入（複查回饋）
+        if (!r.IsEmpty && AutoAddSettings.Enabled)
+        {
+            RaiseAdd();
+        }
+    }
+
+    /// <summary>單字查詢結果推入導航堆疊並顯示（複查回饋）：不自動播放、**不自動加入筆記**（仍可手動加入）。</summary>
+    public void PushWordResult(QueryResult r)
+    {
+        if (_pos < _history.Count - 1)
+        {
+            _history.RemoveRange(_pos + 1, _history.Count - _pos - 1); // 截去前進歷史
+        }
+        _history.Add(r);
+        _pos = _history.Count - 1;
+        Render(r);
+        UpdateNav();
+    }
+
+    /// <summary>往前(-1)/往後(+1)在導航堆疊內移動（快速返回原句）：重顯既有結果、不重查、不自動加入。</summary>
+    private void Navigate(int delta)
+    {
+        int np = _pos + delta;
+        if (np < 0 || np >= _history.Count)
+        {
+            return;
+        }
+        _pos = np;
+        Render(_history[_pos]);
+        UpdateNav();
+    }
+
+    private void UpdateNav()
+    {
+        BackBtn.IsEnabled = _pos > 0;
+        ForwardBtn.IsEnabled = _pos >= 0 && _pos < _history.Count - 1;
+    }
+
+    /// <summary>渲染單一結果至內容區（不含導航/自動播放/自動加入之副作用；供主查詢、單字查詢、導航共用）。</summary>
+    private void Render(QueryResult r)
+    {
         _current = r;
         BodyPanel.Children.Clear();
 
@@ -283,7 +352,7 @@ public partial class ResultWindow : Window
             return;
         }
 
-        // 英文組：原文（逐字可點單獨發音）＋ KK 音標 ＋ 整句播放/自動。
+        // 英文組：原文（逐字可點＝查該單字）＋ KK 音標 ＋ 整句播放/自動。
         // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
         BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia", topMargin: 6));
@@ -299,22 +368,6 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Add(PlayRow("▶ Play",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
             AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
-
-        // 自動播放（勾選後框選完即播）：兩者皆勾則英文先、中文接續
-        if (AutoPlaySettings.English)
-        {
-            speech.Speak(r.Original, "en-US", stopPrevious: true);
-        }
-        if (AutoPlaySettings.Chinese)
-        {
-            speech.Speak(r.Translation, "zh-TW", stopPrevious: !AutoPlaySettings.English);
-        }
-
-        // 自動加入筆記（Issue #34）：勾選後查詢成功即去重收藏，套當前資料夾/底色選擇（#55）
-        if (AutoAddSettings.Enabled)
-        {
-            RaiseAdd();
-        }
     }
 
     public void ShowError(string message)
@@ -372,9 +425,9 @@ public partial class ResultWindow : Window
     }
 
     /// <summary>
-    /// 英文原文以逐字可點呈現（Issue #11）：每個單字為一個 <see cref="Hyperlink"/>，
-    /// 點選即以 en-US 單獨朗讀該字（重複觸發先停再播）；標點與空白為不可點的純文字，
-    /// 整句朗讀與自動播放不受影響。切分規則見 <see cref="EnglishWordTokenizer"/>。
+    /// 英文原文以逐字可點呈現（Issue #11 → 複查回饋改制）：每個單字為一個 <see cref="Hyperlink"/>，
+    /// **點選即查詢該單字**（觸發 <see cref="WordQueryRequested"/>，App 跑文字查詢後 <see cref="PushWordResult"/> 回填、
+    /// 可經往前鈕返回原句）；標點與空白為不可點的純文字。切分規則見 <see cref="EnglishWordTokenizer"/>。
     /// </summary>
     private TextBlock WordifiedOriginal(string text)
     {
@@ -398,9 +451,9 @@ public partial class ResultWindow : Window
                 Foreground = Brush("#3A2C33"), // 維持大字原色，不用預設藍色連結色
                 TextDecorations = WordUnderline, // 淡粉點狀底線＝可點提示（游標另呈手形）
                 Cursor = Cursors.Hand,
-                ToolTip = $"Read “{word}”",
+                ToolTip = $"Look up “{word}”",
             };
-            link.Click += (_, _) => _speech?.Speak(word, "en-US", stopPrevious: true);
+            link.Click += (_, _) => WordQueryRequested?.Invoke(word); // 複查回饋：點單字＝查該字（非發音）
             tb.Inlines.Add(link);
         }
         return tb;

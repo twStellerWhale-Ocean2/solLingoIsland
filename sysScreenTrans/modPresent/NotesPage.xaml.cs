@@ -498,7 +498,7 @@ public partial class NotesPage : UserControl
             BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(8, 10, 10, 10),
+            Padding = new Thickness(8, 4, 10, 4), // #複查：內距縮小、免浪費空間（原 10 上下）
             Margin = new Thickness(0, 0, 0, 8),
             AllowDrop = true, // 事件交由 EntryPanel 統一處理（冒泡），卡片僅作為有效放置目標
         };
@@ -530,7 +530,8 @@ public partial class NotesPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(no content)" : entry.Original,
-            FontSize = 16, // #110 加大字
+            FontSize = 28, // #複查：與查詢結果視窗英文原文同大並加粗（原 #110 之 16）
+            FontWeight = System.Windows.FontWeights.SemiBold,
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
