@@ -86,6 +86,23 @@ public partial class OptionsPage : UserControl
         UpdateHotkeyStatus();
     }
 
+    /// <summary>
+    /// 是否有未儲存變更（#複查）：任一欄位值異於上次儲存的 <see cref="Config"/>，或已輸入尚未套用的金鑰。
+    /// 供主視窗於離開選項頁前提示。以 <see cref="Gather"/> 對上次儲存快照做記錄式結構比對。
+    /// </summary>
+    public bool IsDirty => !string.IsNullOrEmpty(KeyBox.Password) || Gather() != Config;
+
+    /// <summary>捨棄未儲存變更、還原為上次儲存值（#複查：離開頁時選「確定離開」則還原）。</summary>
+    public void RevertChanges()
+    {
+        if (_listening)
+        {
+            StopListening(); // 監聽中離開＝取消監聽、恢復全域熱鍵
+        }
+        KeyBox.Clear();
+        SetConfig(Config); // 以上次儲存快照重填所有欄位
+    }
+
     /// <summary>條目字級數值框 → 滑桿同步（鉗制 12–32；空/非數字回預設）。</summary>
     private void SyncEntryFontFromBox()
     {

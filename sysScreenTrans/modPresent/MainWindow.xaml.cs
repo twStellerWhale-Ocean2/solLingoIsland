@@ -33,15 +33,42 @@ public partial class MainWindow : Window
         _options = options;
         _about = about;
 
-        TabNotes.Checked += (_, _) => { _notes.Reload(); Host.Content = _notes; };
-        TabHistory.Checked += (_, _) => { _history.Reload(); Host.Content = _history; };
-        TabContext.Checked += (_, _) => { _context.Reload(); Host.Content = _context; };
+        // 各分頁切換前先過「離開選項頁」守衛（#複查）：選項頁有未存變更時提示，取消則留在選項頁。
+        TabNotes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _notes.Reload(); Host.Content = _notes; };
+        TabHistory.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _history.Reload(); Host.Content = _history; };
+        TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; };
         TabOptions.Checked += (_, _) => Host.Content = _options;
-        TabAbout.Checked += (_, _) => Host.Content = _about;
+        TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; };
         ResultBtn.Click += (_, _) => ResultRequested?.Invoke();
 
         Host.Content = _notes; // 預設筆記分頁（XAML IsChecked 於接線前已設，故此處明確帶入）
     }
+
+    /// <summary>
+    /// 離開選項頁守衛（#複查）：目前非選項頁或選項頁無未存變更時直接放行；否則提示——
+    /// 「確定離開」＝還原變更值後放行，「取消」＝留在選項頁（回傳 false，由呼叫端還原分頁選取）。
+    /// </summary>
+    private bool ConfirmLeaveOptions()
+    {
+        if (Host.Content != _options || !_options.IsDirty)
+        {
+            return true;
+        }
+        var r = System.Windows.MessageBox.Show(
+            "You have unsaved changes in Options.\n\nLeave without saving? Your changes will be discarded.",
+            "Unsaved changes",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+        if (r == MessageBoxResult.OK)
+        {
+            _options.RevertChanges(); // 離開＝還原為上次儲存值
+            return true;
+        }
+        return false; // 取消＝留在選項頁
+    }
+
+    /// <summary>取消離開後把分頁選取撥回選項頁（設 IsChecked 會觸發 TabOptions.Checked 還原 Host.Content）。</summary>
+    private void ReselectOptionsTab() => TabOptions.IsChecked = true;
 
     /// <summary>切到指定分頁並自收合還原（tray／入口呼叫）。</summary>
     public void ShowTab(MainTab tab)
