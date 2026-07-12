@@ -50,6 +50,8 @@ public partial class ResultView : UserControl
     private readonly List<QueryResult> _history = new();
     private int _pos = -1;
     private bool _wordBusy; // 單字查詢進行中：游標等待＋忽略再點（避免連點，複查回饋）
+    private System.Windows.Threading.DispatcherTimer? _wordClickTimer; // 單擊發音／雙擊查詢之判別計時（v1.0.1）
+    private string _pendingWord = ""; // 待發音之單字（單擊排程、雙擊時取消改查詢）
 
     public ResultView()
     {
@@ -477,21 +479,50 @@ public partial class ResultView : UserControl
                 Foreground = Brush("#3A2C33"), // 維持大字原色，不用預設藍色連結色
                 TextDecorations = WordUnderline, // 淡粉點狀底線＝可點提示（游標另呈手形）
                 Cursor = Cursors.Hand,
-                ToolTip = $"Look up “{word}”",
+                ToolTip = $"Click to pronounce · double-click to look up “{word}”",
             };
-            link.Click += (_, _) =>
-            {
-                if (_wordBusy) // 查詢中：忽略連點（複查回饋）
-                {
-                    return;
-                }
-                _wordBusy = true;
-                System.Windows.Input.Mouse.OverrideCursor = Cursors.Wait; // 等待游標，直到 PushWordResult/失敗清除
-                WordQueryRequested?.Invoke(word); // 點單字＝查該字（非發音）
-            };
+            link.Click += (_, _) => OnWordClick(word); // 單擊＝發音、雙擊＝進一步查詢（v1.0.1）
             tb.Inlines.Add(link);
         }
         return tb;
+    }
+
+    /// <summary>
+    /// 點單字（v1.0.1，USR 回饋）：**單擊＝發音**（en-US 朗讀）、**雙擊＝進一步查詢該字字義**。
+    /// 以計時器辨別——首擊排程發音、於雙擊視窗內對同字再點則取消發音改查詢（避免雙擊時先誤發音）。
+    /// </summary>
+    private void OnWordClick(string word)
+    {
+        if (_wordBusy) // 查詢中：忽略連點
+        {
+            return;
+        }
+        if (_wordClickTimer is { IsEnabled: true } && string.Equals(_pendingWord, word, StringComparison.Ordinal))
+        {
+            _wordClickTimer.Stop(); // 雙擊同字 → 取消發音、改查詢
+            _pendingWord = "";
+            _wordBusy = true;
+            System.Windows.Input.Mouse.OverrideCursor = Cursors.Wait; // 等待游標，直到 PushWordResult/失敗清除
+            WordQueryRequested?.Invoke(word);
+            return;
+        }
+        _pendingWord = word; // 首擊 → 排程發音（雙擊視窗結束仍單擊才發）
+        _wordClickTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _wordClickTimer.Stop();
+        _wordClickTimer.Tick -= OnWordClickElapsed;
+        _wordClickTimer.Tick += OnWordClickElapsed;
+        _wordClickTimer.Start();
+    }
+
+    private void OnWordClickElapsed(object? sender, EventArgs e)
+    {
+        _wordClickTimer?.Stop();
+        var w = _pendingWord;
+        _pendingWord = "";
+        if (!string.IsNullOrEmpty(w))
+        {
+            _speech?.Speak(w, "en-US", stopPrevious: true); // 單擊確認 → 朗讀該字
+        }
     }
 
     private static TextBlock Value(string t, string color, double size, bool bold, string? font = null, double topMargin = 0)
