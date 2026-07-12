@@ -278,12 +278,10 @@ public partial class NotesPage : UserControl
 
     // ---- 排序（#126：非破壞式檢視投影＋三 toggle＋per-folder 記憶；存於 NoteFolder.Sort（notes.json）） ----
 
-    private static readonly FolderSort DefaultSort = new();
-
     /// <summary>目前資料夾之顯示序（投影 f.Entries，不改儲存序；#126）。</summary>
     private static IEnumerable<NoteEntry> DisplayEntries(NoteFolder f)
     {
-        var s = f.Sort ?? DefaultSort;
+        var s = f.Sort ?? new FolderSort(); // 唯讀預設（Manual／正向）：就地建立、不共用可變實例（審查 NIT②）
         return NotesStore.ProjectView(f.Entries, s.Mode, s.CurrentAscending);
     }
 
@@ -330,7 +328,7 @@ public partial class NotesPage : UserControl
     /// <summary>依 f.Sort 更新三排序鈕視覺（作用中＝方向字圖 ▲/▼＋粗體＋深色；非作用＝僅標籤。非顏色線索＝字圖存否，#126 色盲友善）。</summary>
     private void UpdateSortButtons(NoteFolder? f)
     {
-        var s = f?.Sort ?? DefaultSort;
+        var s = f?.Sort ?? new FolderSort(); // 唯讀預設值、不共用可變實例（審查 NIT②）
         SetSortBtn(AlphaSortBtn, "Abc", s.Mode == NoteSortMode.Alpha, s.AlphaAsc);
         SetSortBtn(TimeSortBtn, "Date", s.Mode == NoteSortMode.Time, s.TimeAsc);
         SetSortBtn(ManualSortBtn, "Custom", s.Mode == NoteSortMode.Manual, s.ManualAsc);

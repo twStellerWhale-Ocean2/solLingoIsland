@@ -505,6 +505,8 @@ public sealed class NotesStore
     /// 依英文原文自然排序目前資料夾之條目（Issue #52）：<paramref name="ascending"/>＝順向（A→Z）、否則反向（Z→A）。
     /// 沿用 <see cref="NaturalCompare"/>（大小寫不敏感、數字段依數值），與資料夾排序一致；重排後由呼叫端 Save 持久化。
     /// 空夾即無為。純函式、可單元測試。
+    /// <para><b>#126 起已由 <see cref="ProjectView"/> 非破壞式投影取代、生產不再呼叫</b>；僅存單元測試佐證自然排序語義。
+    /// <b>切勿</b>用於筆記檢視——就地變異 <c>f.Entries</c> 會覆寫使用者手動序（#126 刻意移除之破壞式行為）。</para>
     /// </summary>
     public static void SortEntries(NoteFolder f, bool ascending)
     {
@@ -551,6 +553,8 @@ public sealed class NotesStore
     /// 以 OrderBy **穩定排序**（同時刻多筆維持相對順序；穩定性條款限本時間排序）；
     /// `AddedAt == default`（極舊資料無值）視為最舊——Old→New 排最前、New→Old 排最後。
     /// 空夾即無為；重排後由呼叫端 Save 持久化。純函式、可單元測試。
+    /// <para><b>#126 起已由 <see cref="ProjectView"/> 非破壞式投影取代、生產不再呼叫</b>；僅存單元測試佐證穩定時間排序語義。
+    /// <b>切勿</b>用於筆記檢視——就地變異 <c>f.Entries</c> 會覆寫使用者手動序（#126 刻意移除之破壞式行為）。</para>
     /// </summary>
     public static void SortEntriesByTime(NoteFolder f, bool ascending)
     {

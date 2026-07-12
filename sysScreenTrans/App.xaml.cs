@@ -198,11 +198,21 @@ public partial class App : System.Windows.Application
         args.Handled = true;
     }
 
-    /// <summary>手動觸發擷取（#133：#5 擷取頁「Capture Screen」鈕）：先收合主視窗免截到自身，再走既有喚起主動線。</summary>
-    private void TriggerManualCapture()
+    /// <summary>手動觸發擷取（#133：#5 擷取頁「Capture Screen」鈕）：查詢進行中則忽略；否則先收合主視窗、
+    /// <b>待其真正淡出後</b>再走既有喚起主動線——同步立即擷取會在最小化動畫／DWM 重組完成前就凍結桌面，
+    /// 把主視窗自身烙進畫格、使用者反而選不到它原本遮住的區域（業界審查 #133 MAJOR）。</summary>
+    private async void TriggerManualCapture()
     {
-        if (_main is not null) { _main.WindowState = WindowState.Minimized; } // 先最小化（留工作列可還原、不致「消失」），避免遮罩截到主視窗自身
-        OnHotKey();    // 既有 async void 喚起主動線（遮罩擷取→查詢→結果）
+        if (_busy)
+        {
+            return; // 查詢進行中：不收合（否則視窗消失卻無擷取、無回饋），忽略本次手動觸發（審查 NIT③）
+        }
+        if (_main is not null)
+        {
+            _main.WindowState = WindowState.Minimized; // 先最小化（留工作列可還原、不致「消失」）
+        }
+        await Task.Delay(200); // 待最小化動畫／DWM 重組完成、視窗真正離開畫面後再擷取，免截到主視窗自身
+        OnHotKey();            // 既有喚起主動線（遮罩擷取→查詢→結果）
     }
 
     /// <summary>喚起（第一熱鍵）：遮罩選區/雙擊點選截圖 → vision 查詢 → 結果視窗＋朗讀＋歷史留存。</summary>
