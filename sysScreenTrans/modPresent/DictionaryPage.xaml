@@ -17,16 +17,10 @@
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="Auto"/>
       </Grid.ColumnDefinitions>
-      <ComboBox x:Name="InputBox" Grid.Column="0" FontSize="16" IsEditable="True" Padding="6,3"
+      <!-- 原生可編輯 ComboBox（不自訂 template／ItemContainerStyle）：下拉自動與輸入框同寬、項目左對齊（USR 回饋） -->
+      <ComboBox x:Name="InputBox" Grid.Column="0" FontSize="16" IsEditable="True"
                 StaysOpenOnEdit="True" IsTextSearchEnabled="True" VerticalContentAlignment="Center"
-                ToolTip="Type English or pick from history, then Look up (Enter)">
-        <ComboBox.ItemContainerStyle>
-          <!-- 下拉項左內距對齊輸入框文字（USR 回饋：下拉左側對齊控制項） -->
-          <Style TargetType="ComboBoxItem">
-            <Setter Property="Padding" Value="6,3"/>
-          </Style>
-        </ComboBox.ItemContainerStyle>
-      </ComboBox>
+                ToolTip="Type English or pick from history, then Look up (Enter)"/>
       <Button x:Name="LookupBtn" Grid.Column="1" Content="Look up" Margin="8,0,0,0"
               Padding="16,5" FontSize="14" Style="{StaticResource GhostButton}"/>
     </Grid>
