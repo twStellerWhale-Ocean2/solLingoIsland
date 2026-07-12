@@ -30,6 +30,11 @@
   <ItemGroup>
     <!-- TTS：Windows 內建語音合成（SAPI）[techItem語音合成] -->
     <PackageReference Include="CommunityToolkit.WinUI.Notifications" Version="7.1.2" />
+    <!-- 安全 pin（Issue #134）：CommunityToolkit.WinUI.Notifications 7.1.2 會帶入 transitive
+         System.Drawing.Common 4.7.0（Critical GHSA-rxg9-xrhp-64gj）；直接參照已修補版覆蓋之（NuGet 直接參照
+         優先於 transitive），清除依賴安全告警。本專案 System.Drawing 僅用於自帶圖示載入（App.xaml.cs）與自身
+         螢幕擷取（modCapture），未觸及易受攻擊之 metafile／BinaryFormatter 反序列化路徑；型別來源仍為框架。 -->
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
     <PackageReference Include="System.Speech" Version="9.0.0" />
     <!-- 麥克風錄音（發音練習 spec#10）[techItem發音評分 之錄音端]：NAudio WaveInEvent（MIT） -->
     <PackageReference Include="NAudio" Version="2.2.1" />
