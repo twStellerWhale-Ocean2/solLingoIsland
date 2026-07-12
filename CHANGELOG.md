@@ -2,6 +2,13 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.41.1] - 2026-07-12
+
+清除相依安全告警：System.Drawing.Common 4.7.0 Critical（#134）。
+
+### 修正
+- **清除 System.Drawing.Common Critical 相依告警**（#134）：`CommunityToolkit.WinUI.Notifications 7.1.2` 帶入之 transitive `System.Drawing.Common 4.7.0`（`GHSA-rxg9-xrhp-64gj`／CVE-2021-24112）於 `sysScreenTrans/ScreenTrans.csproj` 直接 pin 已修補版 `9.0.0`（對齊既有 `System.Speech 9.0.0`）覆蓋；`dotnet list package --vulnerable --include-transitive` 無 Critical。本專案 System.Drawing 僅用於自帶圖示載入與自身螢幕擷取、未觸及惡意 metafile／BinaryFormatter 反序列化路徑，功能不回歸。
+
 ## [0.41.0] - 2026-07-12
 
 開放議題批次（#125–#133）：設定頁存離提示與輕量儲存回饋、筆記排序 toggle、Win11 快捷鍵修復、拖曳邊緣捲動與往左直拖、握把加大、狀態列條目數、情境頁升級為「螢幕擷取」（快捷鍵搬入＋手動擷取）。
