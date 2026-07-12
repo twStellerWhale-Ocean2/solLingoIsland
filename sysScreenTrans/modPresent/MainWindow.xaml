@@ -99,6 +99,11 @@
         <StatusBarItem>
           <TextBlock x:Name="HotkeyText" FontSize="12" Foreground="#8A5A6D"/>
         </StatusBarItem>
+        <Separator x:Name="CountSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
+        <StatusBarItem>
+          <!-- 目前檢視之條目列數（#132）：筆記=目前夾條目數／歷史=目前檢視條目數；非該二分頁隱藏 -->
+          <TextBlock x:Name="CountText" FontSize="12" Foreground="#8A5A6D" Visibility="Collapsed"/>
+        </StatusBarItem>
         <Separator x:Name="UpdateSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
         <StatusBarItem>
           <!-- 更新就緒提示（Issue #51）：新版靜默下載完成才顯示，平時隱藏 -->

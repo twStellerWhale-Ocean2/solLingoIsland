@@ -78,6 +78,12 @@ public partial class NotesPage : UserControl
 
     public event Action<NoteEntry>? ViewRequested;
 
+    /// <summary>目前選取資料夾之條目數（#132，供狀態列顯示）。</summary>
+    public int CurrentEntryCount => Selected?.Entries.Count ?? 0;
+
+    /// <summary>目前檢視條目數變更（#132）：切夾/增/刪/重繪後觸發，供主視窗狀態列即時更新。</summary>
+    public event Action<int>? EntryCountChanged;
+
     private TreeViewItem? _pressItem;
     private Point _pressPoint;
     private NoteEntry? _entryDrag;
@@ -252,6 +258,7 @@ public partial class NotesPage : UserControl
         TimeSortBtn.IsEnabled = any;
         ManualSortBtn.IsEnabled = any;
         UpdateSortButtons(f);           // 依 f.Sort 更新作用中鈕之方向字圖/粗體/深色（#126）
+        EntryCountChanged?.Invoke(f?.Entries.Count ?? 0); // #132：條目數變更通知狀態列
         if (f is null)
         {
             return;
@@ -558,15 +565,18 @@ public partial class NotesPage : UserControl
         var handle = new TextBlock
         {
             Text = "≡",
-            FontSize = 16,
+            FontSize = 22, // #131：加大拖曳握把圖示（原 16 偏小、更好辨識與抓取）
+            FontWeight = System.Windows.FontWeights.Bold,
             Foreground = Brush("#C77D9A"),
             Cursor = Cursors.SizeAll, // 四向移動：可上下排序亦可拖入左樹資料夾（Issue #46）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 8, 0),
             ToolTip = "Drag to reorder / drag onto a folder to move",
         };
-        handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); };
-        handle.PreviewMouseLeftButtonUp += (_, _) => _entryDrag = null; // 放開即清（對稱防殘留）
+        // #130：按下即擷取滑鼠——指標離開窄握把後仍收 PreviewMouseMove，直接往左橫移至左樹資料夾亦能起拖
+        //（原先未擷取，往左一離開握把即收不到移動事件、門檻跨不過，須先上下拖曳才生效）。
+        handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); handle.CaptureMouse(); };
+        handle.PreviewMouseLeftButtonUp += (_, _) => { _entryDrag = null; handle.ReleaseMouseCapture(); }; // 放開即清＋釋放擷取（對稱防殘留）
         handle.PreviewMouseMove += OnEntryHandleMove;
         Grid.SetColumn(handle, 0);
         grid.Children.Add(handle);
@@ -996,6 +1006,7 @@ public partial class NotesPage : UserControl
         }
         var moving = _entryDrag;
         _entryDrag = null;
+        (sender as UIElement)?.ReleaseMouseCapture(); // #130：起拖前釋放握把擷取，讓 DoDragDrop 自行接管拖放
         DragDrop.DoDragDrop(EntryPanel, new DataObject(FmtEntry, moving.Id), DragDropEffects.Move);
         HideInsertLine();  // 拖曳結束（含取消／落在樹側）清除指示線
         StopEdgeScroll();  // #128：拖曳結束（放開/Esc/取消）即停自動捲動
