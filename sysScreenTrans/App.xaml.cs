@@ -124,6 +124,8 @@ public partial class App : System.Windows.Application
 
         _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
+        _main.ResultRequested += SummonResult; // 功能列「Dictionary」鈕→喚出獨立字典視窗（v1.0.1 恢復）
+        _main.ExitRequested += ExitApp;        // 主視窗關閉(✕)→結束整個程式（v1.0.1：移除原「關閉＝收合」防關閉行為，USR 回饋）
         // 主視窗取得焦點不關結果卡片（Issue #105：與主視窗共存，關閉時機僅限使用者關閉／新查詢或檢視取代／選項儲存重建）
         _main.WindowState = WindowState.Minimized;
         _main.Show();

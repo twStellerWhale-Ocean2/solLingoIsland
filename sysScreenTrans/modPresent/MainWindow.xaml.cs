@@ -9,11 +9,18 @@ public enum MainTab { Notes, History, Context, Options, About }
 /// <summary>
 /// 統一 Office 式主視窗（Issue #34）：頂部功能列分頁（圖示＋文字）＋下方對應功能頁，取代原
 /// DockWindow／HistoryWindow／NotesWindow／SettingsWindow 各獨立視窗。標準工作列視窗；
-/// <b>關閉（✕）＝收合（最小化）而非結束</b>——唯呼叫端經「結束」才真正關閉；淺粉底＋logo 背景。
+/// <b>關閉（✕）＝結束整個程式</b>（v1.0.1，USR 回饋，取代原「關閉＝收合」防關閉行為）；
+/// 背景常駐／熱鍵請改用「最小化（_）」保留；淺粉底＋logo 背景。
 /// </summary>
 public partial class MainWindow : Window
 {
-    private bool _exiting; // true 時允許真正關閉（結束程式）；否則關閉＝收合。結束由系統匣「結束」觸發。
+    private bool _exiting; // true＝允許真正關閉。使用者按 ✕ 先觸發 ExitRequested→App 統一結束（AllowClose 設此旗標後 Shutdown）。
+
+    /// <summary>功能列右上「Dictionary」鈕按下（v1.0.1 恢復）：本視窗僅發事件，喚出獨立字典視窗之決策在 App 組合根。</summary>
+    public event Action? ResultRequested;
+
+    /// <summary>使用者按主視窗關閉（✕）：請求結束整個常駐程式（v1.0.1，取代原「關閉＝收合」；由 App 走統一結束流程）。</summary>
+    public event Action? ExitRequested;
 
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
@@ -41,6 +48,7 @@ public partial class MainWindow : Window
         TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };
         TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; ShowEntryCount(null); };
+        ResultBtn.Click += (_, _) => ResultRequested?.Invoke();
 
         Host.Content = _notes; // 預設筆記分頁（XAML IsChecked 於接線前已設，故此處明確帶入）
         ShowEntryCount(_notes.CurrentEntryCount); // #132：初始筆記分頁條目數
@@ -161,8 +169,11 @@ public partial class MainWindow : Window
     {
         if (!_exiting)
         {
-            e.Cancel = true;          // 關閉＝收合，程式續常駐
-            WindowState = WindowState.Minimized;
+            // v1.0.1（USR 回饋）：移除原「關閉(✕)＝收合」防關閉行為——✕ 改為結束整個常駐程式。
+            // 先攔下本次關閉、轉交 App 走統一結束流程（ExitApp→AllowClose 設 _exiting→Shutdown→OnExit 清理，
+            // 屆時再次進入本方法時 _exiting 已 true 而真正關閉）；背景常駐/熱鍵改用「最小化(_)」保留。
+            e.Cancel = true;
+            ExitRequested?.Invoke();
             return;
         }
         base.OnClosing(e);

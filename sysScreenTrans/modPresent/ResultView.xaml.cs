@@ -46,6 +46,12 @@ public partial class ResultView : UserControl
     /// <summary>編輯原文後按「重新翻譯」時觸發（複查回饋：辨識有誤時校正重查）；App 跑 QueryTextAsync 後以 <see cref="ReplaceCurrentResult"/> 回填。</summary>
     public event Action<string>? TextReQueryRequested;
 
+    /// <summary>頂部輸入框按「Look up」或 Enter 時觸發（帶英文原文；App 依單字/整句決定查字義或翻譯）。v1.0.1：自 DictionaryPage 移入（兩列對調）。</summary>
+    public event Action<string>? ManualQueryRequested;
+
+    /// <summary>輸入下拉開啟時觸發：App 據此以查詢歷史填入下拉。v1.0.1：自 DictionaryPage 移入（兩列對調）。</summary>
+    public event Action? HistoryRequested;
+
     // 導航堆疊（複查回饋）：主查詢＝reset 為單一，查單字＝push，往前/往後在堆疊內移動、不重查亦不自動加入筆記
     private readonly List<QueryResult> _history = new();
     private int _pos = -1;
@@ -61,12 +67,26 @@ public partial class ResultView : UserControl
         ForwardBtn.Click += (_, _) => Navigate(1);
         EditBtn.Click += (_, _) => ShowEditMode();
         UpdateNav();
+
+        // 手動查詢輸入列（v1.0.1：自 DictionaryPage 移入，置於頂部工具列下方）：Look up/Enter 送查詢、開下拉取歷史＋鎖下拉寬度
+        LookupBtn.Click += (_, _) => DoLookup();
+        InputBox.KeyDown += OnInputKeyDown;
+        InputBox.DropDownOpened += OnDropDownOpened;
         AutoAddChk.IsChecked = AutoAddSettings.Enabled;
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
         AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
 
         _currentColor = NoteDefaults.ColorHex; // 預設底色（#55）
         FolderCombo.SelectionChanged += OnFolderChanged;
+        // 播音速度下拉（v1.0.1，USR 回饋）：選 50–200% → 寫入 SpeechRateSettings（SpeechService 每次朗讀讀取套用）
+        SpeedCombo.SelectionChanged += (_, _) =>
+        {
+            if (SpeedCombo.SelectedItem is System.Windows.Controls.ComboBoxItem it
+                && int.TryParse((it.Content?.ToString() ?? "").TrimEnd('%'), out var pct))
+            {
+                SpeechRateSettings.Percent = pct;
+            }
+        };
         BuildSwatches();
         BuildFolderCombo(); // 無情境資訊時先以預設建；App 設定 targets 後重建
     }
@@ -197,6 +217,98 @@ public partial class ResultView : UserControl
         {
             AddToNotesRequested?.Invoke(new NoteAddRequest(r, CurrentFolderName(), _currentColor));
         }
+    }
+
+    // ---- 手動查詢輸入列（v1.0.1：自 DictionaryPage 移入；USR 回饋「兩列對調」，置於頂部工具列下方） ----
+
+    private void OnInputKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            DoLookup();
+            e.Handled = true;
+        }
+    }
+
+    private void DoLookup()
+    {
+        var t = (InputBox.Text ?? "").Trim();
+        if (t.Length == 0)
+        {
+            return;
+        }
+        ManualQueryRequested?.Invoke(t);
+    }
+
+    private void OnDropDownOpened(object? sender, EventArgs e)
+    {
+        HistoryRequested?.Invoke(); // 開下拉即向 App 取查詢歷史填入
+        ConstrainDropDownWidth();   // 下拉清單寬度鎖回輸入框寬度
+    }
+
+    /// <summary>以查詢歷史（英文原文、新在前、去重）填入輸入下拉；保留使用者當前已鍵入文字。</summary>
+    public void SetHistory(IEnumerable<string> originals)
+    {
+        var text = InputBox.Text;
+        InputBox.ItemsSource = originals?.ToList();
+        InputBox.Text = text; // 換 ItemsSource 不清掉使用者已輸入內容
+    }
+
+    private bool _dropDownWidthBound;
+
+    /// <summary>
+    /// 令歷史下拉與輸入框**同寬**（USR 回饋 v1.0.1）：原生可編輯 ComboBox 的 popup 僅綁 <c>MinWidth＝控制項寬</c>、
+    /// 無寬度上限，歷史項目為整句英文原文時會把下拉撐得比輸入框寬。這裡把原生模板中的下拉外框
+    /// <c>DropDownBorder</c>（取不到時退回 <c>PART_Popup</c> 內容）之 <c>MaxWidth</c> 綁定輸入框
+    /// <see cref="System.Windows.FrameworkElement.ActualWidth"/>，並關掉水平捲軸（配合 ItemTemplate 之省略號），
+    /// 使下拉恆等於輸入框寬度。於首次開啟綁定一次（模板內 popup 內容此時方實體化）。
+    /// </summary>
+    private void ConstrainDropDownWidth()
+    {
+        if (_dropDownWidthBound)
+        {
+            return;
+        }
+        var toInputWidth = new System.Windows.Data.Binding("ActualWidth") { Source = InputBox };
+        System.Windows.FrameworkElement? popupContent = null;
+        if (InputBox.Template?.FindName("DropDownBorder", InputBox) is System.Windows.FrameworkElement border)
+        {
+            popupContent = border;
+        }
+        else if (InputBox.Template?.FindName("PART_Popup", InputBox) is System.Windows.Controls.Primitives.Popup { Child: System.Windows.FrameworkElement child })
+        {
+            popupContent = child;
+        }
+        if (popupContent is null)
+        {
+            return; // 模板尚未實體化 popup 內容：不設旗標，下次開啟再試
+        }
+        popupContent.SetBinding(System.Windows.FrameworkElement.MaxWidthProperty, toInputWidth);
+        // 關下拉內部水平捲軸：改讓過長項目以省略號截斷（配合 ItemTemplate 之 TextTrimming），不撐寬亦不出水平捲軸
+        if (FindDescendant<System.Windows.Controls.ScrollViewer>(popupContent) is { } sv)
+        {
+            sv.HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled;
+        }
+        _dropDownWidthBound = true;
+    }
+
+    /// <summary>深度優先找第一個指定型別的視覺子代（用於取原生 ComboBox 下拉 popup 內部之 ScrollViewer）。</summary>
+    private static T? FindDescendant<T>(System.Windows.DependencyObject root) where T : System.Windows.DependencyObject
+    {
+        int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < n; i++)
+        {
+            var c = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (c is T hit)
+            {
+                return hit;
+            }
+            if (FindDescendant<T>(c) is { } deeper)
+            {
+                return deeper;
+            }
+        }
+        return null;
     }
 
     public void ShowLoading()
