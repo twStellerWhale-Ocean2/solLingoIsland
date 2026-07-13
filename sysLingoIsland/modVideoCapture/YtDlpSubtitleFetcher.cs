@@ -128,10 +128,14 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
             {
                 await p.WaitForExitAsync(cts.Token);
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
-                throw new SubtitleException($"Fetching subtitles timed out ({_timeoutSec}s).");
+                try { p.Kill(entireProcessTree: true); } catch { /* ignore */ } // 逾時或外部取消皆殺行程、免孤兒 yt-dlp
+                if (!ct.IsCancellationRequested)
+                {
+                    throw new SubtitleException($"Fetching subtitles timed out ({_timeoutSec}s).");
+                }
+                throw; // 外部取消（新 Load／取消鈕）→ 傳遞 OperationCanceledException，UI 顯示「Load canceled.」
             }
             var stderr = await stderrTask;
             _ = await stdoutTask;
