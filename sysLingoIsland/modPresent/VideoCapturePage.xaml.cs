@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -22,6 +23,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private int _shownCue = -1;        // 目前字幕帶顯示之 cue
     private bool _webReady;
     private bool _guiding;             // 導引播放中（輪詢到句暫停生效）
+    private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
 
     /// <summary>暫停句點選單字＝查該字（App 導向獨立字典視窗，沿用 spec#1 查詢）。</summary>
     public event Action<string>? WordLookupRequested;
@@ -51,7 +53,20 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         if (_webReady) return;
         try
         {
-            await Web.EnsureCoreWebView2Async();
+            // autoplay 政策放寬：導引播放需程式化 playVideo() 自動起播（無 WebView2 內文件手勢）。
+            var opts = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+            };
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, null, opts);
+            await Web.EnsureCoreWebView2Async(env);
+
+            // player.html 以真實 https 虛擬主機供給——YouTube IFrame 拒 null/opaque origin（NavigateToString）之內嵌（Error 150/153）。
+            var dir = Path.Combine(Path.GetTempPath(), "lingoisland-player");
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(Path.Combine(dir, "player.html"), PlayerHtml());
+            Web.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                HostName, dir, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
             _webReady = true;
         }
         catch (Exception ex)
@@ -90,7 +105,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             await EnsureWebAsync();
             if (_webReady)
             {
-                Web.NavigateToString(PlayerHtml(id));
+                Web.CoreWebView2.Navigate($"https://{HostName}/player.html?v={id}");
                 _guiding = true;
                 _poll.Start();
                 SetControls(true);
@@ -106,24 +121,26 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         finally { SetBusy(false); }
     }
 
-    /// <summary>承載 YouTube IFrame Player API 之最小 HTML；宿主以 li_time/li_pause/li_play/li_seek 控制。</summary>
-    private static string PlayerHtml(string videoId) => """
+    /// <summary>承載 YouTube IFrame Player API 之最小 HTML（自 query 之 <c>v</c> 取影片 ID）；宿主以 li_time/li_pause/li_play/li_seek 控制。
+    /// 經 WebView2 虛擬主機以真實 https origin 供給——NavigateToString 之 null/opaque origin 會被 YouTube 拒（Error 150/153）。</summary>
+    private static string PlayerHtml() => """
 <!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{width:100%;height:100%}</style></head>
 <body><div id="p"></div>
 <script>
 var player,ready=false;
+var vid=new URLSearchParams(location.search).get('v')||'';
 var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";
 document.head.appendChild(tag);
-function onYouTubeIframeAPIReady(){player=new YT.Player('p',{height:'100%',width:'100%',videoId:'__VID__',
- playerVars:{'playsinline':1,'rel':0,'modestbranding':1},
+function onYouTubeIframeAPIReady(){player=new YT.Player('p',{height:'100%',width:'100%',videoId:vid,
+ playerVars:{'playsinline':1,'rel':0,'modestbranding':1,'origin':location.origin},
  events:{'onReady':function(){ready=true;player.playVideo();}}});}
 window.li_time=function(){return (ready&&player&&player.getCurrentTime)?player.getCurrentTime():-1;};
 window.li_pause=function(){if(ready&&player)player.pauseVideo();};
 window.li_play=function(){if(ready&&player)player.playVideo();};
 window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVideo();}};
 </script></body></html>
-""".Replace("__VID__", videoId);
+""";
 
     private async void OnPoll(object? sender, EventArgs e)
     {
