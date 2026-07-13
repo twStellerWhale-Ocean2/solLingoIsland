@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using LingoIsland.Capture;
 using LingoIsland.Present;
 using LingoIsland.Query;
+using LingoIsland.Video;
 using WinForms = System.Windows.Forms;
 
 namespace LingoIsland;
@@ -122,7 +123,12 @@ public partial class App : System.Windows.Application
         _dictionaryWindow.Page.ManualQueryRequested += text => _ = ManualLookupAsync(text); // 頂部手動輸入查詢
         _dictionaryWindow.Page.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入
 
-        _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
+        // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
+        var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher());
+        videoPage.WordLookupRequested += LookupWordFromVideo;
+        videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
+
+        _main = new MainWindow(_notesPage, _historyPage, _contextPage, videoPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
         _main.ResultRequested += SummonResult; // 功能列「Dictionary」鈕→喚出獨立字典視窗（v1.0.1 恢復）
         _main.ExitRequested += ExitApp;        // 主視窗關閉(✕)→結束整個程式（v1.0.1：移除原「關閉＝收合」防關閉行為，USR 回饋）
@@ -291,6 +297,35 @@ public partial class App : System.Windows.Application
         {
             _dictionaryWindow?.Page.WordLookupFailed(); // 清等待游標＋忙碌旗標
             ToastNotifier.Show("Word lookup failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>影片擷取頁點字幕單字（#139，spec#2）：顯示獨立字典視窗 loading，再沿用既有單字查詢主動線（來源改字幕文字）。</summary>
+    private void LookupWordFromVideo(string word)
+    {
+        _dictionaryWindow?.Page.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryWindow?.Page.ShowLoading();
+        _dictionaryWindow?.ShowAndActivate();
+        _ = LookupWordAsync(word);
+    }
+
+    /// <summary>影片擷取頁「加入我的筆記」（#139，spec#2）：整句重譯後入既有 NotesStore（沿用去重／資料夾／發音練習、共用不另造）。</summary>
+    private async Task AddVideoNoteAsync(string english)
+    {
+        var t = (english ?? "").Trim();
+        if (t.Length == 0)
+        {
+            return;
+        }
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            var result = await query.QueryTextAsync(t);
+            AddToNotes(new NoteAddRequest(result, NoteDefaults.FolderName, NoteDefaults.ColorHex));
+        }
+        catch (QueryException ex)
+        {
+            ToastNotifier.Show("Add to notes failed: " + ex.Message);
         }
     }
 

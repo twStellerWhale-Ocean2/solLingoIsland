@@ -4,7 +4,7 @@ using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 namespace LingoIsland.Present;
 
 /// <summary>統一主視窗之分頁。</summary>
-public enum MainTab { Notes, History, Context, Options, About }
+public enum MainTab { Notes, History, Context, Video, Options, About }
 
 /// <summary>
 /// 統一 Office 式主視窗（Issue #34）：頂部功能列分頁（圖示＋文字）＋下方對應功能頁，取代原
@@ -25,15 +25,17 @@ public partial class MainWindow : Window
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
     private readonly ContextPage _context;
+    private readonly VideoCapturePage _video;
     private readonly OptionsPage _options;
     private readonly AboutPage _about;
 
-    public MainWindow(NotesPage notes, HistoryPage history, ContextPage context, OptionsPage options, AboutPage about)
+    public MainWindow(NotesPage notes, HistoryPage history, ContextPage context, VideoCapturePage video, OptionsPage options, AboutPage about)
     {
         InitializeComponent();
         _notes = notes;
         _history = history;
         _context = context;
+        _video = video;
         _options = options;
         _about = about;
 
@@ -46,6 +48,7 @@ public partial class MainWindow : Window
         TabNotes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _notes.Reload(); Host.Content = _notes; ShowEntryCount(_notes.CurrentEntryCount); };
         TabHistory.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _history.Reload(); Host.Content = _history; ShowEntryCount(_history.CurrentEntryCount); };
         TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; ShowEntryCount(null); };
+        TabVideo.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _video; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };
         TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; ShowEntryCount(null); };
         ResultBtn.Click += (_, _) => ResultRequested?.Invoke();
@@ -94,6 +97,7 @@ public partial class MainWindow : Window
             case MainTab.Notes: TabNotes.IsChecked = true; break;
             case MainTab.History: TabHistory.IsChecked = true; break;
             case MainTab.Context: TabContext.IsChecked = true; break;
+            case MainTab.Video: TabVideo.IsChecked = true; break;
             case MainTab.Options: TabOptions.IsChecked = true; break;
             case MainTab.About: TabAbout.IsChecked = true; break;
         }
