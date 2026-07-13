@@ -111,4 +111,84 @@ public class SubtitleParserTests
         Assert.Equal(63.5, SubtitleParser.ParseTime("01:03.500"), 3);   // MM:SS.mmm
         Assert.Equal(63.5, SubtitleParser.ParseTime("00:01:03,500"), 3); // HH:MM:SS,mmm
     }
+
+    // ── json3（自動字幕改用之乾淨事件級格式，spec#2）──
+
+    [Fact]
+    public void ParseJson3_EventsToCues_ConcatSegsAndTimes()
+    {
+        var json = """
+        {"events":[
+          {"tStartMs":1200,"dDurationMs":2000,"segs":[{"utf8":"Hello"},{"utf8":" world"}]},
+          {"tStartMs":3500,"dDurationMs":1500,"segs":[{"utf8":"Goodbye"}]}
+        ]}
+        """;
+        var cues = SubtitleParser.ParseJson3(json);
+        Assert.Equal(2, cues.Count);
+        Assert.Equal("Hello world", cues[0].Text);
+        Assert.Equal(1.2, cues[0].StartSec, 3);
+        Assert.Equal(3.2, cues[0].EndSec, 3);
+        Assert.Equal("Goodbye", cues[1].Text);
+        Assert.Equal(3.5, cues[1].StartSec, 3);
+        Assert.Equal(5.0, cues[1].EndSec, 3);
+    }
+
+    [Fact]
+    public void ParseJson3_SkipsEmptyTextAndSegless()
+    {
+        var json = """
+        {"events":[
+          {"tStartMs":0,"dDurationMs":500,"segs":[{"utf8":"\n"}]},
+          {"tStartMs":1000,"dDurationMs":1000,"segs":[{"utf8":"real"}]},
+          {"tStartMs":2000,"dDurationMs":1000,"segs":[]}
+        ]}
+        """;
+        var cues = SubtitleParser.ParseJson3(json);
+        Assert.Single(cues);
+        Assert.Equal("real", cues[0].Text);
+    }
+
+    [Fact]
+    public void ParseJson3_DropsConsecutiveDuplicates()
+    {
+        var json = """
+        {"events":[
+          {"tStartMs":0,"dDurationMs":1000,"segs":[{"utf8":"same"}]},
+          {"tStartMs":1000,"dDurationMs":1000,"segs":[{"utf8":"same"}]},
+          {"tStartMs":2000,"dDurationMs":1000,"segs":[{"utf8":"next"}]}
+        ]}
+        """;
+        var cues = SubtitleParser.ParseJson3(json);
+        Assert.Equal(2, cues.Count);
+        Assert.Equal("same", cues[0].Text);
+        Assert.Equal("next", cues[1].Text);
+    }
+
+    [Fact]
+    public void ParseJson3_ToleratesStringNumericFields()
+    {
+        var json = """{"events":[{"tStartMs":"2500","dDurationMs":"1500","segs":[{"utf8":"x"}]}]}""";
+        var cues = SubtitleParser.ParseJson3(json);
+        Assert.Single(cues);
+        Assert.Equal(2.5, cues[0].StartSec, 3);
+        Assert.Equal(4.0, cues[0].EndSec, 3);
+    }
+
+    [Fact]
+    public void ParseJson3_ZeroDuration_GivesShortNonZeroSpan()
+    {
+        var cues = SubtitleParser.ParseJson3("""{"events":[{"tStartMs":5000,"dDurationMs":0,"segs":[{"utf8":"blip"}]}]}""");
+        Assert.Single(cues);
+        Assert.True(cues[0].EndSec > cues[0].StartSec);
+    }
+
+    [Fact]
+    public void ParseJson3_NullEmptyOrMalformed_ReturnsEmpty()
+    {
+        Assert.Empty(SubtitleParser.ParseJson3(null));
+        Assert.Empty(SubtitleParser.ParseJson3(""));
+        Assert.Empty(SubtitleParser.ParseJson3("not json"));
+        Assert.Empty(SubtitleParser.ParseJson3("{\"nope\":1}")); // 無 events
+        Assert.Empty(SubtitleParser.ParseJson3("[1,2,3]"));      // 非物件根
+    }
 }
