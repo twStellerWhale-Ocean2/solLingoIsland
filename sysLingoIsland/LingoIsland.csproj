@@ -40,6 +40,8 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <!-- 安裝式散佈＋自動更新（Issue #51）：GitHub Release 為更新源、差量升級 -->
     <PackageReference Include="Velopack" Version="1.2.0" />
+    <!-- 影片擷取（#139，spec#2）：WebView2 內嵌 YouTube IFrame Player API（[techItem影片播放]）；runtime 於 Win11 內建 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
   </ItemGroup>
 
   <ItemGroup>
