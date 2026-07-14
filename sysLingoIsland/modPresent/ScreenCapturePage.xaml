@@ -57,10 +57,22 @@
 
       <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="6">
         <Grid>
-          <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
-          <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
-                     Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
-                     TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <!-- 所屬主題（內容區塊上方；顯示/改指派選取截圖之主題，#173） -->
+          <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,2,4,6" VerticalAlignment="Center">
+            <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,6,0"/>
+            <ComboBox x:Name="ShotThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
+                      IsEnabled="False" ToolTip="Show / change the theme this screenshot belongs to"/>
+          </StackPanel>
+          <Grid Grid.Row="1">
+            <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
+            <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
+                       Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
+                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Grid>
         </Grid>
       </Border>
     </Grid>
