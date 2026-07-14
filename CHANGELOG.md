@@ -2,6 +2,19 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.5.0] - 2026-07-14
+
+說話人字幕＋依說話人篩選＋整檔 YAML 編修（epic #145 增量 5，#154）。
+
+### 新增
+- **說話人字幕**：`SubtitleCue` 增選用 `Speaker` 欄；`SubtitleParser` 解析人工字幕之 VTT `<v 名字>` 語音標記為說話人（確定來源、非 AI 推斷）。右側字幕清單與當前句字幕帶每句**前置說話人**；`CoalesceCues` 於具名說話人變更處斷句、併句沿用首句說話人。
+- **依說話人篩選**：右欄上方下拉選單（`All speakers`／各說話人／`(no speaker)`），**僅影響顯示**，不動導引播放與到句暫停之 cue index（清單改綁保留原始 index 之 view-model）。
+- **整檔 YAML 編修**：Edit YAML 把整份字幕攤為 YAML（`speaker`／`start`／`end`／`text`）一次修訂斷句與說話人，Apply 解析回逐句（YAML 語法錯留在編修模式明訊、續從目前播放時間到句暫停）、Cancel 放棄。新增 `SubtitleYaml` 往返序列化（新依賴 YamlDotNet 18.1.0，MIT）。
+
+### 備註
+- 純函式（Parser 說話人解析／斷句、SubtitleYaml 往返含引號強韌性）＋16 單元測試；全套 406 綠。
+- 說話人多來源疊加（AI 推斷／wiki 參照）與「指定說話人才暫停」為後續增量（epic #145 增量 6／7）。
+
 ## [2.4.0] - 2026-07-14
 
 影片頁三欄版面＋影片清單（epic #145 增量 4，#152）。
