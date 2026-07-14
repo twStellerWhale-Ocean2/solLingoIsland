@@ -40,6 +40,8 @@ public partial class ScreenCapturePage : UserControl
 
     // 截圖管理（epic #145 增量3）
     private readonly ScreenshotStore _shots;
+    private readonly ThemeStore _themes;      // 依 theme 篩選（多媒體主題管理·B）
+    private bool _populatingFilter;           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private string? _selectedShotId;
 
     /// <summary>手動觸發螢幕擷取（#5：「Capture Screen」鈕）；呼叫端收合主視窗後走既有喚起主動線。</summary>
@@ -51,23 +53,35 @@ public partial class ScreenCapturePage : UserControl
     /// <summary>擷取到新綁定時觸發（#133）；呼叫端據此持久化＋重註冊全域熱鍵。</summary>
     public event Action<HotKeyBinding>? HotkeyChanged;
 
-    public ScreenCapturePage(string initialHotkey, ScreenshotStore shots)
+    public ScreenCapturePage(string initialHotkey, ScreenshotStore shots, ThemeStore themes)
     {
         InitializeComponent();
         _shots = shots;
+        _themes = themes;
 
         ChangeHotkeyBtn.Click += (_, _) => StartListening();
         CaptureScreenBtn.Click += (_, _) => CaptureRequested?.Invoke();
         Unloaded += (_, _) => StopListening();
 
-        // 截圖管理
+        // 截圖管理＋依 theme 篩選（B）
         ShotList.SelectionChanged += OnShotSelect;
         DeleteShotBtn.Click += OnDeleteShot;
         ClearShotsBtn.Click += OnClearShots;
+        ShotThemeFilter.SelectionChanged += (_, _) => { if (!_populatingFilter) { RefreshScreenshots(); } };
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) { PopulateThemeFilter(); RefreshScreenshots(); } }; // 切回本頁重填（反映主題增刪改）
 
         _hotkey = HotKeyBinding.Parse(initialHotkey); // 目前快捷鍵初值（自 AppConfig.Hotkey）
         UpdateHotkeyStatus();
+        PopulateThemeFilter();
         RefreshScreenshots();
+    }
+
+    /// <summary>以目前主題重填「依 theme 篩選」下拉（圖文）；期間抑制重整、保留選取。</summary>
+    private void PopulateThemeFilter()
+    {
+        _populatingFilter = true;
+        ThemeFilter.Populate(ShotThemeFilter, _themes);
+        _populatingFilter = false;
     }
 
     // ---- 截圖管理（epic #145 增量3） ----
@@ -76,15 +90,20 @@ public partial class ScreenCapturePage : UserControl
     public void RefreshScreenshots()
     {
         var d = _shots.Load();
+        var themeId = ThemeFilter.SelectedThemeId(ShotThemeFilter); // null＝All（B）
+        var shown = d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)).ToList();
         ShotList.SelectionChanged -= OnShotSelect;
         ShotList.Items.Clear();
-        foreach (var it in d.Items)
+        foreach (var it in shown)
         {
             ShotList.Items.Add(new ListBoxItem { Content = ShotItemView(it), Tag = it, Padding = new Thickness(4) });
         }
         ShotList.SelectionChanged += OnShotSelect;
 
-        var any = d.Items.Count > 0;
+        var any = shown.Count > 0;
+        ShotEmptyHint.Text = d.Items.Count == 0
+            ? "No screenshots yet. Capture a screen (button or hotkey) to save it here."
+            : "No screenshots for this theme."; // 有截圖但本 theme 無
         ShotEmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         if (!any)
         {

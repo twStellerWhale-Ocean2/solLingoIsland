@@ -109,7 +109,7 @@ public partial class App : System.Windows.Application
         _themeStore.LoadMigrated(_config.Context); // #14 單一主題提示相容遷移為一則命名主題
         _themePage = new ThemeManagementPage(_themeStore,
             bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
-        _capturePage = new ScreenCapturePage(_config.Hotkey, _screenshotStore); // 快捷鍵初值（#133）＋截圖儲存（增量3）
+        _capturePage = new ScreenCapturePage(_config.Hotkey, _screenshotStore, _themeStore); // 快捷鍵初值（#133）＋截圖儲存（增量3）＋依 theme 篩選（B）
         // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由螢幕截圖頁承載（#133／#5；epic #145 增量2 自主題頁拆出）
         _capturePage.ListeningChanged += _listenGuard.OnListeningChanged;
         _capturePage.HotkeyChanged += OnHotkeyChanged;
@@ -129,7 +129,7 @@ public partial class App : System.Windows.Application
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
         // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
         var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
-            () => { var a = ThemeStore.GetActive(_themeStore.Load()); return (a?.Id, a?.Name); }, // 影片清單＋加入時記錄使用中主題（增量4）
+            _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
             new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec));
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
