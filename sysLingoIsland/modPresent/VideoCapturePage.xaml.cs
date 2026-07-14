@@ -20,7 +20,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 {
     private readonly ISubtitleFetcher _fetcher;
     private readonly VideoStore _videoStore;                       // 影片清單持久化（epic #145 增量4）
-    private readonly Func<(string? Id, string? Name)> _activeTheme; // 加入影片時記錄使用中主題（跨媒體歸屬）
+    private readonly ThemeStore _themes;                           // 使用中主題（加入影片時記錄跨媒體歸屬）＋依 theme 篩選（B）
+    private bool _populatingVideoFilter;                           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private readonly ISpeakerEnricher _enricher;                   // 說話人來源疊加（epic #145 增量6：AI 推斷；會用到 API、按鈕觸發）
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private readonly DispatcherTimer _poll;
@@ -57,13 +58,13 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
 
-    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, Func<(string? Id, string? Name)> activeTheme,
+    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
                             ISpeakerEnricher enricher)
     {
         InitializeComponent();
         _fetcher = fetcher;
         _videoStore = videoStore;
-        _activeTheme = activeTheme;
+        _themes = themes;
         _enricher = enricher;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
@@ -84,9 +85,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         Loaded += async (_, _) => await EnsureWebAsync();
         IsVisibleChanged += OnVisibleChanged; // 切走分頁：停輪詢＋暫停播放；切回：恢復輪詢
 
-        // 影片清單（epic #145 增量4）：點清單載入該片、刪除、初次載入
+        // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、刪除、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
         DeleteVideoBtn.Click += (_, _) => OnDeleteVideo();
+        VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
+        PopulateVideoThemeFilter();
         RefreshVideoList();
     }
 
@@ -98,9 +101,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             _poll.Stop();
             if (_webReady) { try { _ = Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 離場盡力 */ } }
         }
-        else if (_guiding && _webReady)
+        else
         {
-            _poll.Start();
+            PopulateVideoThemeFilter(); // 切回本頁重填篩選（反映主題增刪改，B）
+            RefreshVideoList();
+            if (_guiding && _webReady) { _poll.Start(); }
         }
     }
 
@@ -185,8 +190,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 _poll.Start();
                 if (addToStore) // 貼連結載入＝加入影片清單（依 VideoId 去重、記錄使用中主題）；標題先用 id、起播後自播放器更新
                 {
-                    var (tid, tname) = _activeTheme();
-                    var vi = _videoStore.Add(id, id, tid, tname, DateTimeOffset.Now);
+                    var a = ThemeStore.GetActive(_themes.Load());
+                    var vi = _videoStore.Add(id, id, a?.Id, a?.Name, DateTimeOffset.Now);
                     _currentVideoItemId = vi.Id;
                     RefreshVideoList();
                 }
@@ -212,9 +217,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     public void RefreshVideoList()
     {
         var d = _videoStore.Load();
+        var themeId = ThemeFilter.SelectedThemeId(VideoThemeFilter); // null＝All（B）
+        var shown = d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)).ToList();
         VideoList.SelectionChanged -= OnVideoSelect;
         VideoList.Items.Clear();
-        foreach (var it in d.Items)
+        foreach (var it in shown)
         {
             VideoList.Items.Add(new System.Windows.Controls.ListBoxItem
             {
@@ -235,8 +242,19 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             }
         }
         VideoList.SelectionChanged += OnVideoSelect;
-        VideoEmptyHint.Visibility = d.Items.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        VideoEmptyHint.Text = d.Items.Count == 0
+            ? "No videos yet. Paste a YouTube link above and Load."
+            : "No videos for this theme."; // 有影片但本 theme 無
+        VideoEmptyHint.Visibility = shown.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
         DeleteVideoBtn.IsEnabled = VideoList.SelectedItem is not null;
+    }
+
+    /// <summary>以目前主題重填「依 theme 篩選」下拉（圖文）；期間抑制重整、保留選取。</summary>
+    private void PopulateVideoThemeFilter()
+    {
+        _populatingVideoFilter = true;
+        ThemeFilter.Populate(VideoThemeFilter, _themes);
+        _populatingVideoFilter = false;
     }
 
     private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)

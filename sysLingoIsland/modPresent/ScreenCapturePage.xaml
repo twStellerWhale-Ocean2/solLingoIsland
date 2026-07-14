@@ -55,8 +55,17 @@
           </Grid.ColumnDefinitions>
 
           <Border Grid.Column="0" Style="{StaticResource Card}">
-            <ListBox x:Name="ShotList" BorderThickness="0" Background="Transparent" Margin="4"
-                     HorizontalContentAlignment="Stretch"/>
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
+              <ComboBox x:Name="ShotThemeFilter" Grid.Row="0" Height="26" Margin="4,4,4,2"
+                        VerticalContentAlignment="Center" ToolTip="Filter screenshots by theme"/>
+              <ListBox x:Name="ShotList" Grid.Row="1" BorderThickness="0" Background="Transparent" Margin="4"
+                       HorizontalContentAlignment="Stretch"/>
+            </Grid>
           </Border>
 
           <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>

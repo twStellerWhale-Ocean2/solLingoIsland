@@ -45,12 +45,21 @@
         <TextBlock Grid.Row="0" Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" Margin="2,0,0,4"/>
         <Border Grid.Row="1" Style="{StaticResource Card}">
           <Grid>
-            <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
-                     HorizontalContentAlignment="Stretch"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a video to load it"/>
-            <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a YouTube link above and Load."
-                       Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
-                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
+            <ComboBox x:Name="VideoThemeFilter" Grid.Row="0" Height="26" Margin="4,4,4,2"
+                      VerticalContentAlignment="Center" ToolTip="Filter videos by theme"/>
+            <Grid Grid.Row="1">
+              <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
+                       HorizontalContentAlignment="Stretch"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a video to load it"/>
+              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a YouTube link above and Load."
+                         Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
+                         TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
           </Grid>
         </Border>
         <Button Grid.Row="2" x:Name="DeleteVideoBtn" Content="Delete" Foreground="#B23B3B"
