@@ -131,7 +131,8 @@ public partial class App : System.Windows.Application
         var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
             new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),
-            new YtDlpVideoSearcher()); // 依關鍵字搜尋 YouTube（#171）
+            new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
+            new SubtitleStore()); // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
 
