@@ -14,13 +14,15 @@ public static class SpeakerInference
     public static string BuildPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle)
     {
         var sb = new StringBuilder();
-        sb.Append("下面是一支影片的英文字幕逐句（已編號）。請依對話內容與常識，推斷每一句最可能的說話者名稱");
-        sb.Append("（角色名或人名）。這是**根據台詞文字的推斷、非觀看畫面**；無法判斷者回空字串。");
+        sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請依對話內容與常識，推斷每一句最可能的說話者");
+        sb.Append("（**具體**角色名或人名，非群體名如「PAW Patrol」，除非真的無法判斷）。這是根據台詞文字的推斷、非觀看畫面。");
+        sb.Append("非台詞之句（音效／音樂／掌聲等，如 [music]、[applause]、[laughs]、純狀聲）與無法判斷者，一律回空字串。");
         if (!string.IsNullOrWhiteSpace(videoTitle))
         {
-            sb.Append("\n影片標題（輔助判斷角色，僅供參考）：").Append(videoTitle.Trim());
+            sb.Append("\n影片標題（輔助判斷角色）：").Append(videoTitle.Trim());
         }
-        sb.Append("\n回傳 JSON：{\"speakers\":[...]}，speakers 為字串陣列、長度與句數相同、依序一一對應（第 n 句對第 n 個）。\n\n逐句：");
+        sb.Append("\n只回傳 JSON：{\"speakers\":[...]}，speakers 為字串陣列、長度必須恰好 ").Append(cues.Count);
+        sb.Append(" 個、依序一一對應（第 n 句對第 n 個）。不要輸出任何說明或思考文字。\n\n逐句：");
         for (var i = 0; i < cues.Count; i++)
         {
             sb.Append('\n').Append(i + 1).Append(". ").Append(cues[i].Text);
@@ -48,8 +50,7 @@ public static class SpeakerInference
         var list = new List<string?>();
         foreach (var e in arr.EnumerateArray())
         {
-            var s = e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-            list.Add(string.IsNullOrWhiteSpace(s) ? null : s!.Trim());
+            list.Add(CleanSpeaker(e.ValueKind == JsonValueKind.String ? e.GetString() : null));
         }
         return list;
     }
@@ -60,15 +61,15 @@ public static class SpeakerInference
     public static string BuildWebPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle)
     {
         var sb = new StringBuilder();
-        sb.Append("下面是一支影片的英文字幕逐句（已編號）。請【上網搜尋】這支影片／影集的逐字稿或角色台詞資料");
-        sb.Append("（優先採用熱門、可信來源，如官方或 fandom wiki 的逐字稿），據以判斷每一句最可能的說話者名稱（角色名）。");
-        sb.Append("無法確定者回空字串。");
+        sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請【上網搜尋】這支影片／影集的逐字稿或角色台詞資料");
+        sb.Append("（優先採用熱門、可信來源，如官方或 fandom wiki 的逐字稿），據以判斷每一句最可能的說話者（**具體**角色名）。");
+        sb.Append("非台詞之句（音效／音樂／掌聲，如 [music]、[applause]）與無法對上逐字稿者，一律回空字串——**寧可留空，也不要硬填或整段重複同一個名字**。");
         if (!string.IsNullOrWhiteSpace(videoTitle))
         {
             sb.Append("\n影片標題（搜尋與判斷角色用）：").Append(videoTitle.Trim());
         }
-        sb.Append("\n**只**回傳 JSON 物件、不要任何說明文字或 markdown 圍籬：{\"speakers\":[...]}，");
-        sb.Append("speakers 為字串陣列、長度與句數完全相同、依序一一對應（第 n 句對第 n 個）。\n\n逐句：");
+        sb.Append("\n**只**回傳 JSON 物件、不要任何搜尋過程／思考／說明文字或 markdown 圍籬：{\"speakers\":[...]}，");
+        sb.Append("speakers 長度必須恰好 ").Append(cues.Count).Append(" 個、依序一一對應（第 n 句對第 n 個）。\n\n逐句：");
         for (var i = 0; i < cues.Count; i++)
         {
             sb.Append('\n').Append(i + 1).Append(". ").Append(cues[i].Text);
@@ -144,8 +145,7 @@ public static class SpeakerInference
             var list = new List<string?>();
             foreach (var e in arr.EnumerateArray())
             {
-                var v = e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-                list.Add(string.IsNullOrWhiteSpace(v) ? null : v!.Trim());
+                list.Add(CleanSpeaker(e.ValueKind == JsonValueKind.String ? e.GetString() : null));
             }
             return list;
         }
@@ -177,6 +177,20 @@ public static class SpeakerInference
             if (obj.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i)) { return i; }
         }
         return null;
+    }
+
+    /// <summary>
+    /// 清理模型回傳之說話人標籤（#品質修）：空白／音效或旁白（<c>[...</c>／<c>(...</c>，如 <c>[music]</c>）／
+    /// 不確定標記（含 <c>?</c>，如 <c>"?"</c>、<c>"Chase/Ryder (?)"</c>）／過長（思考外漏、多名混寫）一律視為未知（null）；否則去空白。
+    /// </summary>
+    internal static string? CleanSpeaker(string? raw)
+    {
+        var s = raw?.Trim();
+        if (string.IsNullOrEmpty(s)) { return null; }
+        if (s.Length > 24) { return null; }              // 思考外漏／多名混寫
+        if (s[0] is '[' or '(') { return null; }          // 音效／旁白，如 [music]、(applause)
+        if (s.Contains('?')) { return null; }             // 不確定標記
+        return s;
     }
 
     /// <summary>

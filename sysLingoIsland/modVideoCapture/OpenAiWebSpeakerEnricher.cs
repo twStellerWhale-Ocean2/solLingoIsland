@@ -17,8 +17,8 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher
     private readonly int _timeoutSec;
     private static readonly HttpClient Http = new();
 
-    /// <summary>網搜較慢，逾時至少放寬到此秒數（避免沿用查詢用的短逾時把網搜切掉）。</summary>
-    private const int MinTimeoutSec = 60;
+    /// <summary>網搜＋gpt-4.1＋長輸出較慢，逾時至少放寬到此秒數（避免沿用查詢用的短逾時把網搜切掉）。</summary>
+    private const int MinTimeoutSec = 120;
 
     public OpenAiWebSpeakerEnricher(string model, int timeoutSec)
     {
@@ -45,6 +45,27 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher
             model = _model,
             tools = new object[] { new { type = "web_search" } }, // 內建網搜工具（模型自行上網）
             input = SpeakerInference.BuildWebPrompt(cues, videoTitle),
+            // 結構化輸出：強制 speakers 為「恰好句數」個字串——根治小模型退化重複/無限吐字造成的截斷（#品質修）。
+            max_output_tokens = Math.Min(16000, cues.Count * 15 + 800), // 有界安全上限：即使退化也不無限燒
+            text = new
+            {
+                format = new
+                {
+                    type = "json_schema",
+                    name = "speaker_labels",
+                    strict = true,
+                    schema = new
+                    {
+                        type = "object",
+                        properties = new Dictionary<string, object>
+                        {
+                            ["speakers"] = new { type = "array", items = new { type = "string" }, minItems = cues.Count, maxItems = cues.Count },
+                        },
+                        required = new[] { "speakers" },
+                        additionalProperties = false,
+                    },
+                },
+            },
         });
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);

@@ -68,6 +68,21 @@ public class SpeakerInferenceTests
         Assert.ThrowsAny<System.Exception>(() => SpeakerInference.ParseSpeakers(Api("not json at all")));
     }
 
+    [Fact]
+    public void ParseSpeakers_CleansNoiseLabels()
+    {
+        // #品質修：音效[.../旁白(.../不確定?/過長 → null（未知）；正常名保留
+        var speakers = SpeakerInference.ParseSpeakers(
+            Api("{\"speakers\":[\"[music]\",\"(applause)\",\"?\",\"Chase/Ryder (?)\",\"Ryder\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}"));
+        Assert.Equal(6, speakers.Count);
+        Assert.Null(speakers[0]);  // [music]
+        Assert.Null(speakers[1]);  // (applause)
+        Assert.Null(speakers[2]);  // ?
+        Assert.Null(speakers[3]);  // Chase/Ryder (?)（含 ?）
+        Assert.Equal("Ryder", speakers[4]);
+        Assert.Null(speakers[5]);  // 過長（思考外漏）
+    }
+
     // ── MergeSpeakers（非破壞疊加）──
 
     [Fact]
