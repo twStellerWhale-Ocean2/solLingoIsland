@@ -86,12 +86,18 @@
           <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" FontSize="16" Foreground="#2A2A2A"/>
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-          <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,0" IsEnabled="False"/>
-          <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,0" IsEnabled="False"/>
-          <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,0" IsEnabled="False"/>
-          <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="16,0,0,0" IsEnabled="False"/>
-        </StackPanel>
+        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+          <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+          <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+          <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+          <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
+          <!-- 指定說話人才暫停（增量7）：只在該說話人之句到句暫停、其餘續播 -->
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
+            <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+            <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
+                      IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
+          </StackPanel>
+        </WrapPanel>
       </Grid>
 
       <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>

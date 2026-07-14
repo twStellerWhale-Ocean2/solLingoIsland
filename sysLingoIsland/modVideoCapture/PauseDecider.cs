@@ -14,17 +14,24 @@ public static class PauseDecider
     /// 依當前播放秒數判斷是否應暫停：回「下一句（尚未暫停過）」之 index，否則 -1。
     /// start-only（#158）：一句之暫停點＝<c>min(下一句開始, 本句開始＋<paramref name="maxRunSec"/>)</c>——一般到下一句才停；
     /// 遇超長間隔則於「本句開始＋上限」先停（本句仍顯示、不乾等）。最後一句於「開始＋上限」後可停一次。
-    /// <paramref name="lastPausedIndex"/>＝上次已暫停之 cue index（-1＝尚未）；cues 須依 StartSec 遞增。逐句推進、不跳句。
+    /// <paramref name="pauseSpeaker"/>（指定說話人才暫停，增量7）：非 null／空時，只在該說話人之句暫停、其餘句略過續播不暫停（不漏該說話人之句）。
+    /// <paramref name="lastPausedIndex"/>＝上次已暫停之 cue index（-1＝尚未）；cues 須依 StartSec 遞增。
     /// </summary>
     public static int NextPause(double currentSec, IReadOnlyList<SubtitleCue> cues, int lastPausedIndex,
-        double maxRunSec = DefaultMaxRunSec)
+        double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null)
     {
-        var next = lastPausedIndex + 1;
-        if (next < 0 || next >= cues.Count) return -1;
+        var next = Math.Max(0, lastPausedIndex + 1);
+        // 指定說話人：跳過非該說話人之句（不暫停、續播），找下一個符合者
+        while (next < cues.Count && !SpeakerMatches(pauseSpeaker, cues[next].Speaker)) next++;
+        if (next >= cues.Count) return -1;
         var capped = cues[next].StartSec + maxRunSec;
         var pausePoint = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
         return currentSec >= pausePoint ? next : -1;
     }
+
+    /// <summary>指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。</summary>
+    internal static bool SpeakerMatches(string? target, string? speaker) =>
+        string.IsNullOrEmpty(target) || string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// 回含 <paramref name="currentSec"/> 之 cue index（顯示當前句用）：start-only 一句顯示至下一句開始（無空窗），

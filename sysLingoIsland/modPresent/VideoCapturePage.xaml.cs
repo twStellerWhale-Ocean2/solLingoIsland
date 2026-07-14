@@ -47,8 +47,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
     private bool _inferring;           // AI 說話人推斷中（防重入、按鈕停用）（增量6）
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
+    private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
+    private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
     private const string AllSpeakers = "All speakers";
     private const string NoSpeaker = "(no speaker)";
+    private const string EveryoneSpeaker = "Everyone"; // Pause-at 之「全部」選項（增量7）
 
     private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
 
@@ -80,6 +83,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
         InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync();
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
+        PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
         Loaded += async (_, _) => await EnsureWebAsync();
@@ -371,7 +375,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                     : $"{_cues.Count} subtitle lines loaded — playback pauses at each line; tap a word to look it up.");
             }
 
-            var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex);
+            var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker); // 指定說話人才暫停（增量7）
             if (pause >= 0)
             {
                 _lastPausedIndex = pause;
@@ -494,6 +498,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _speakerFilter = null; _filterNoSpeaker = false; // 新字幕一律不篩選（與下拉重置 All 一致）——修 YAML 套用後殘留舊篩選（此路徑未經 ClearCues 重置）
         _cueView.Filter = CueRowFilter;
         PopulateSpeakerFilter();
+        PopulatePauseAtSpeaker(); // 指定說話人才暫停（增量7）
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
         InferSpeakersBtn.IsEnabled = has;
@@ -512,9 +517,12 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         SpeakerFilter.Items.Clear();
         _refreshingCues = false;
         _speakerFilter = null; _filterNoSpeaker = false;
+        _pauseSpeaker = null;
+        _populatingPauseAt = true; PauseAtSpeaker.Items.Clear(); _populatingPauseAt = false;
         SpeakerFilter.IsEnabled = false;
         InferSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
+        PauseAtSpeaker.IsEnabled = false;
     }
 
     /// <summary>重填說話人下拉：All＋各具名說話人（去重排序）；有具名又有未標示句時另加「(no speaker)」。預設選 All。</summary>
@@ -554,6 +562,33 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         if (_filterNoSpeaker) return string.IsNullOrEmpty(row.Cue.Speaker);
         if (_speakerFilter is null) return true;
         return string.Equals(row.Cue.Speaker, _speakerFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- 指定說話人才暫停（增量7）：Everyone＋各具名說話人；選定後導引播放只在該說話人之句到句暫停 ----
+
+    /// <summary>重填 Pause-at 下拉：Everyone＋各具名說話人（去重排序）；保留選取（該說話人已無則回 Everyone）；無具名說話人則停用。</summary>
+    private void PopulatePauseAtSpeaker()
+    {
+        _populatingPauseAt = true;
+        var prev = _pauseSpeaker;
+        PauseAtSpeaker.Items.Clear();
+        PauseAtSpeaker.Items.Add(EveryoneSpeaker);
+        var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
+                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                         .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var n in names) PauseAtSpeaker.Items.Add(n);
+        var idx = prev is null ? 0 : PauseAtSpeaker.Items.IndexOf(prev);
+        PauseAtSpeaker.SelectedIndex = idx >= 0 ? idx : 0;
+        _pauseSpeaker = PauseAtSpeaker.SelectedIndex <= 0 ? null : prev;
+        PauseAtSpeaker.IsEnabled = names.Count > 0; // 有具名說話人才有意義
+        _populatingPauseAt = false;
+    }
+
+    /// <summary>下拉改變→設定「指定說話人才暫停」（Everyone＝null＝全部暫停）。</summary>
+    private void ApplyPauseAtSpeaker()
+    {
+        var sel = PauseAtSpeaker.SelectedItem as string;
+        _pauseSpeaker = (sel is null || sel == EveryoneSpeaker) ? null : sel;
     }
 
     /// <summary>
