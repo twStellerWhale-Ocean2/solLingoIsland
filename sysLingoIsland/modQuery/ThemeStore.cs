@@ -9,6 +9,8 @@ public sealed class ThemeItem
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "";
     public string Text { get; set; } = "";
+    /// <summary>搜尋關鍵字（#171）：供影片頁「依關鍵字查 YouTube」預填；舊 themes.json 無此鍵→反序列化為空。</summary>
+    public string Keywords { get; set; } = "";
     /// <summary>圖片檔名（<c>themes\{檔名}</c>）；null＝無圖。</summary>
     public string? Image { get; set; }
     public bool IsActive { get; set; }
@@ -144,6 +146,16 @@ public sealed class ThemeStore
         if (it is not null)
         {
             it.Text = text ?? "";
+        }
+    }
+
+    /// <summary>更新主題搜尋關鍵字（#171）。</summary>
+    public static void UpdateKeywords(ThemesData d, string id, string keywords)
+    {
+        var it = Find(d, id);
+        if (it is not null)
+        {
+            it.Keywords = keywords?.Trim() ?? "";
         }
     }
 

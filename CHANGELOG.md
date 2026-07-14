@@ -2,6 +2,18 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.12.0] - 2026-07-14
+
+依關鍵字搜尋 YouTube＋影片清單縮圖＋主題搜尋關鍵字（#171）。
+
+### 新增
+- **影片頁依關鍵字查 YouTube**：載入網址列上方新增搜尋列（🔎 Search／Enter），以本機 `yt-dlp`（`ytsearchN:query --flat-playlist --dump-json`、免額外金鑰）搜尋；結果以**下拉選單**（縮圖＋標題）顯示、**點選直接載入**。新增 `IVideoSearcher`／`YtDlpVideoSearcher`（純函式 `ParseResults`＋4 單元測試）。
+- **主題「Search keywords」欄位**：`ThemeItem.Keywords`；主題編輯區加輸入框；影片頁**預填使用中主題之關鍵字**。
+- **影片清單附 YouTube 縮圖**：清單每筆顯示 `img.youtube.com` 縮圖（比照主題清單），離線/失敗留空不致命。
+
+### 備註
+- 搜尋/縮圖需本機 yt-dlp 與網路（比照字幕擷取）；只列清單、不下載影片。全套 430 綠。
+
 ## [2.11.0] - 2026-07-14
 
 主題頁統一版面＋字幕雙擊跳播＋YAML 自動換行（#169）。
