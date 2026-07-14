@@ -463,6 +463,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         for (var i = 0; i < _cues.Count; i++) _rows.Add(new CueRow(i, _cues[i]));
         CueList.ItemsSource = _rows;
         _cueView = System.Windows.Data.CollectionViewSource.GetDefaultView(_rows);
+        _speakerFilter = null; _filterNoSpeaker = false; // 新字幕一律不篩選（與下拉重置 All 一致）——修 YAML 套用後殘留舊篩選（此路徑未經 ClearCues 重置）
         _cueView.Filter = CueRowFilter;
         PopulateSpeakerFilter();
         var has = _cues.Count > 0;
@@ -512,7 +513,9 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var sel = SpeakerFilter.SelectedItem as string;
         _filterNoSpeaker = sel == NoSpeaker;
         _speakerFilter = (sel is null || sel == AllSpeakers || sel == NoSpeaker) ? null : sel;
+        _refreshingCues = true;   // Refresh 濾掉當前選取項時會清選取觸發 SelectionChanged——抑制其誤觸跳播
         _cueView?.Refresh();
+        _refreshingCues = false;
     }
 
     private bool CueRowFilter(object o)

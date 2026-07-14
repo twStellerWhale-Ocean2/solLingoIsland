@@ -53,6 +53,11 @@ public static class SubtitleYaml
         {
             throw new SubtitleException("Invalid YAML: " + FirstLine(ex.Message));
         }
+        catch (Exception ex)
+        {
+            // 使用者手打之非預期結構（根為對映、型別無法轉換等）——一律轉可讀失敗，供 UI 明訊、不成為未觀察 task 例外
+            throw new SubtitleException("Could not parse subtitle YAML: " + FirstLine(ex.Message));
+        }
         if (rows is null) return cues;
 
         foreach (var r in rows)
@@ -63,7 +68,8 @@ public static class SubtitleYaml
             var end = r.End > r.Start ? r.End : r.Start + 0.1; // 保底非零區間
             cues.Add(new SubtitleCue(text, r.Start, end, speaker));
         }
-        return cues;
+        // 依起點穩定排序：PauseDecider/CueAt/LastCueEndedBy 假定 StartSec 遞增；使用者於整檔 YAML 可能改動時序或重排
+        return cues.OrderBy(c => c.StartSec).ToList();
     }
 
     private static string FirstLine(string s)

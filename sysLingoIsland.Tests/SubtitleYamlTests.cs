@@ -71,6 +71,17 @@ public class SubtitleYamlTests
     }
 
     [Fact]
+    public void Parse_SortsByStartSec()
+    {
+        // 使用者於整檔 YAML 打亂順序 → 解析後仍依起點遞增（PauseDecider/CueAt/LastCueEndedBy 假定）
+        var yaml = "- start: 5\n  end: 6\n  text: third\n"
+                 + "- start: 1\n  end: 2\n  text: first\n"
+                 + "- start: 3\n  end: 4\n  text: second\n";
+        var cues = SubtitleYaml.Parse(yaml);
+        Assert.Equal(new[] { "first", "second", "third" }, cues.Select(c => c.Text));
+    }
+
+    [Fact]
     public void Parse_EmptyText_Skipped()
     {
         var yaml = "- speaker: A\n  start: 1\n  end: 2\n  text: ''\n"
