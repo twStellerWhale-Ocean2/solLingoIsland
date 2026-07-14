@@ -120,7 +120,8 @@
 
             <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
                     Margin="0,8,0,0" Padding="10" MinHeight="52">
-              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" FontSize="16" Foreground="#2A2A2A"/>
+              <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記） -->
+              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#2A2A2A"/>
             </Border>
 
             <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">

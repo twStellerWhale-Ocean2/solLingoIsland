@@ -121,6 +121,16 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         PopulateVideoThemeFilter();
         RefreshVideoList();
         PrefillSearchFromTheme(); // #171：以使用中主題關鍵字預填搜尋框
+        ApplySubtitleDisplay();   // 字幕帶字級/粗體偏好（比照筆記，設定可調）
+    }
+
+    /// <summary>套用字幕帶顯示偏好（字級/粗體，比照筆記「條目顯示」）：建立與設定變更時套用。當前句逐字 Run 繼承 SubtitleBand 之字級/字重。</summary>
+    public void ApplySubtitleDisplay()
+    {
+        SubtitleBand.FontSize = SubtitleDisplaySettings.FontSize;
+        SubtitleBand.FontWeight = SubtitleDisplaySettings.Bold
+            ? System.Windows.FontWeights.Bold
+            : System.Windows.FontWeights.Normal;
     }
 
     /// <summary>切走 Video 分頁即停輪詢並暫停播放（免背景永久 100ms 輪詢與音訊續播）；切回恢復輪詢（不自動續播，由使用者 Continue）。</summary>
