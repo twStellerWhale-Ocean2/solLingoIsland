@@ -112,4 +112,66 @@ public class SpeakerInferenceTests
         var after = new[] { C("a", "X"), C("b", "E"), C("c") };
         Assert.Equal(1, SpeakerInference.CountNewlyLabeled(before, after)); // 僅 a：未標示→有值
     }
+
+    // ── 網搜來源（增量6b）：BuildWebPrompt／ParseWebSpeakers（Responses API 形狀） ──
+
+    /// <summary>把逐句說話人內容包成 OpenAI Responses API 回應形狀（web_search_call ＋ message.output_text）。</summary>
+    private static string WebApi(string outputText) =>
+        JsonSerializer.Serialize(new
+        {
+            output = new object[]
+            {
+                new { type = "web_search_call", id = "ws_1", status = "completed" },
+                new { type = "message", role = "assistant", content = new object[]
+                    { new { type = "output_text", text = outputText } } },
+            },
+        });
+
+    [Fact]
+    public void BuildWebPrompt_InstructsWebSearch_NumbersLines_IncludesTitle()
+    {
+        var p = SpeakerInference.BuildWebPrompt(new[] { C("Hello there"), C("General Kenobi") }, "Star Wars clip");
+        Assert.Contains("1. Hello there", p);
+        Assert.Contains("2. General Kenobi", p);
+        Assert.Contains("Star Wars clip", p);
+        Assert.Contains("上網搜尋", p);   // 指示模型上網
+        Assert.Contains("speakers", p);
+    }
+
+    [Fact]
+    public void ParseWebSpeakers_FromMessageOutputText_EmptyToNull()
+    {
+        var speakers = SpeakerInference.ParseWebSpeakers(WebApi("{\"speakers\":[\"Ryder\",\"\",\"Chase\"]}"));
+        Assert.Equal(3, speakers.Count);
+        Assert.Equal("Ryder", speakers[0]);
+        Assert.Null(speakers[1]);
+        Assert.Equal("Chase", speakers[2]);
+    }
+
+    [Fact]
+    public void ParseWebSpeakers_TolerantToFencesAndProse()
+    {
+        var text = "Here are the speakers I found:\n```json\n{\"speakers\":[\"Marshall\",\"Skye\"]}\n```\nHope that helps!";
+        Assert.Equal(new[] { "Marshall", "Skye" }, SpeakerInference.ParseWebSpeakers(WebApi(text)));
+    }
+
+    [Fact]
+    public void ParseWebSpeakers_OutputTextConvenienceField()
+    {
+        var json = JsonSerializer.Serialize(new { output_text = "{\"speakers\":[\"X\"]}", output = Array.Empty<object>() });
+        Assert.Equal(new[] { "X" }, SpeakerInference.ParseWebSpeakers(json));
+    }
+
+    [Fact]
+    public void ParseWebSpeakers_NoMessage_ReturnsEmpty()
+    {
+        var json = JsonSerializer.Serialize(new { output = new object[] { new { type = "web_search_call", id = "ws_1" } } });
+        Assert.Empty(SpeakerInference.ParseWebSpeakers(json));
+    }
+
+    [Fact]
+    public void ParseWebSpeakers_MalformedEnvelope_Throws()
+    {
+        Assert.ThrowsAny<System.Exception>(() => SpeakerInference.ParseWebSpeakers("not json at all"));
+    }
 }

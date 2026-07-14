@@ -24,6 +24,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _populatingVideoFilter;                           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private bool _populatingVideoPicker;                           // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
     private readonly ISpeakerEnricher _enricher;                   // 說話人來源疊加（epic #145 增量6：AI 推斷；會用到 API、按鈕觸發）
+    private readonly ISpeakerEnricher _webEnricher;                // 說話人來源（增量6b）：OpenAI 網搜工具上網找逐字稿（會用到 API、按鈕觸發）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private bool _populatingResults;                               // 填搜尋結果下拉期間抑制 SelectionChanged→載入
@@ -69,13 +70,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     public event Action<string>? AddToNotesRequested;
 
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
-                            ISpeakerEnricher enricher, IVideoSearcher searcher, SubtitleStore subtitles)
+                            ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IVideoSearcher searcher, SubtitleStore subtitles)
     {
         InitializeComponent();
         _fetcher = fetcher;
         _videoStore = videoStore;
         _themes = themes;
         _enricher = enricher;
+        _webEnricher = webEnricher;
         _searcher = searcher;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -98,7 +100,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         CueList.MouseDoubleClick += (_, _) => { _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); };
         // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
-        InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync();
+        InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync(_enricher, SpeakerSource.Dialogue);
+        WebSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
@@ -713,6 +716,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
         InferSpeakersBtn.IsEnabled = has;
+        WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
     }
 
@@ -732,6 +736,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _populatingPauseAt = true; PauseAtSpeaker.Items.Clear(); _populatingPauseAt = false;
         SpeakerFilter.IsEnabled = false;
         InferSpeakersBtn.IsEnabled = false;
+        WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
         PauseAtSpeaker.IsEnabled = false;
     }
@@ -802,12 +807,15 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _pauseSpeaker = (sel is null || sel == EveryoneSpeaker) ? null : sel;
     }
 
+    /// <summary>說話人來源：依台詞 AI 推斷（增量6）或 OpenAI 網搜上網找逐字稿（增量6b）。用於狀態訊息措辭。</summary>
+    private enum SpeakerSource { Dialogue, Web }
+
     /// <summary>
-    /// AI 說話人疊加（epic #145 增量6，#156）：以 <see cref="ISpeakerEnricher"/> 依台詞逐句推斷說話人、非破壞併回
-    /// （僅填補未標示、保留既有 ground truth）。**會用到 API、故按鈕觸發**。推斷期間停用按鈕、播放持續（僅補說話人、
-    /// 文字/時間/播放 index 不變，保留當前句與到句暫停進度）；期間若載入新片／套用 YAML 使字幕換手則丟棄結果（stale guard）。
+    /// 說話人疊加（epic #145 增量6／6b，#156／#145 §D）：以指定 <paramref name="enricher"/> 取每句說話人、非破壞併回
+    /// （僅填補未標示、保留既有 ground truth），並存回字幕存檔（#174）。**會用到 API、故按鈕觸發**。期間停用兩顆來源鈕
+    /// 與 Edit YAML、播放持續（文字/時間/播放 index 不變，保留當前句與到句暫停進度）；期間若載入新片／套用 YAML 使字幕換手則丟棄（stale guard）。
     /// </summary>
-    private async Task InferSpeakersAsync()
+    private async Task InferSpeakersAsync(ISpeakerEnricher enricher, SpeakerSource source)
     {
         if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) return;
         _inferCts?.Cancel();
@@ -815,12 +823,15 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var ct = _inferCts.Token;
         _inferring = true;
         InferSpeakersBtn.IsEnabled = false;
+        WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
-        SetStatus("Inferring speakers from the dialogue with AI…");
+        SetStatus(source == SpeakerSource.Web
+            ? "Searching the web for this show's transcript to label speakers…"
+            : "Inferring speakers from the dialogue with AI…");
         var target = _cues; // stale guard 基準
         try
         {
-            var speakers = await _enricher.InferSpeakersAsync(target, _currentTitle, ct);
+            var speakers = await enricher.InferSpeakersAsync(target, _currentTitle, ct);
             if (ct.IsCancellationRequested || !ReferenceEquals(_cues, target)) return; // 被取代／已換片／套用 YAML → 丟棄過時結果
             var merged = SpeakerInference.MergeSpeakers(target, speakers);
             var filled = SpeakerInference.CountNewlyLabeled(target, merged);
@@ -829,17 +840,22 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, merged); } // 存 AI 說話人結果（#174）
             if (keepShown >= 0 && keepShown < _rows.Count) ShowCue(keepShown); // 重繪字幕帶（含新說話人前綴）
             SetStatus(filled > 0
-                ? $"AI labeled {filled} more line(s) with a speaker (inference from dialogue, not ground truth)."
-                : "AI couldn't confidently add any new speaker labels for this subtitle.");
+                ? (source == SpeakerSource.Web
+                    ? $"Looked up the web and labeled {filled} more line(s) with a speaker."
+                    : $"AI labeled {filled} more line(s) with a speaker (inference from dialogue, not ground truth).")
+                : (source == SpeakerSource.Web
+                    ? "Couldn't match any speaker info found online to this subtitle."
+                    : "AI couldn't confidently add any new speaker labels for this subtitle."));
         }
         catch (SpeakerEnrichException ex) { SetStatus(ex.Message); }
         catch (OperationCanceledException) { /* 被新載入／新推斷取代 → 靜默，狀態由後續操作接手 */ }
-        catch (Exception ex) { SetStatus("Speaker inference failed: " + ex.Message); }
+        catch (Exception ex) { SetStatus((source == SpeakerSource.Web ? "Online speaker lookup failed: " : "Speaker inference failed: ") + ex.Message); }
         finally
         {
             _inferring = false;
             var enable = _cues.Count > 0 && !_yamlEditing && !_loading; // 載入中不啟用（避免併發載入時短暫可按但無效）
             InferSpeakersBtn.IsEnabled = enable;
+            WebSpeakersBtn.IsEnabled = enable;
             EditYamlBtn.IsEnabled = enable;
         }
     }
@@ -856,6 +872,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         YamlEditor.Visibility = System.Windows.Visibility.Visible;
         SpeakerFilter.IsEnabled = false;
         InferSpeakersBtn.IsEnabled = false;
+        WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
     }
@@ -890,6 +907,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
         InferSpeakersBtn.IsEnabled = has;
+        WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }

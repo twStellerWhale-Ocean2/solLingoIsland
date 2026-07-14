@@ -130,7 +130,8 @@ public partial class App : System.Windows.Application
         // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
         var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
-            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),
+            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),          // 增量6：依台詞 AI 推斷說話人
+            new OpenAiWebSpeakerEnricher("gpt-4.1-mini", _config.TimeoutSec),      // 增量6b：OpenAI 網搜工具上網找逐字稿補說話人（#145 §D；gpt-4o-mini 不支援 web_search，另用 gpt-4.1-mini）
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
             new SubtitleStore()); // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
         videoPage.WordLookupRequested += LookupWordFromVideo;

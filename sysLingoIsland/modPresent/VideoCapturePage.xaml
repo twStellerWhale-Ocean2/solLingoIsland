@@ -151,13 +151,22 @@
                       IsEnabled="False" ToolTip="Filter lines by speaker"/>
 
             <Grid Grid.Row="1" Margin="0,4,0,4">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-              <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
-                      IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
-              <Button x:Name="EditYamlBtn" Grid.Column="1" Content="Edit YAML" Height="26" Margin="3,0,0,0"
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <!-- 兩顆說話人來源（同疊加架構）：AI 依台詞推斷（增量6）｜🌐 網搜上網找逐字稿（增量6b） -->
+              <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
+                        IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
+                <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Web" Height="26" Margin="3,0,0,0"
+                        IsEnabled="False" ToolTip="Search the web for this show's transcript to label speakers (OpenAI web search; uses your OpenAI key)"/>
+              </Grid>
+              <Button x:Name="EditYamlBtn" Grid.Row="1" Content="Edit YAML" Height="26" Margin="0,4,0,0"
                       IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
             </Grid>
 
