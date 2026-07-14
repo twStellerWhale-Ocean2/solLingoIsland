@@ -49,17 +49,31 @@
 
       <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12">
         <StackPanel>
+          <!-- 依主題搜尋關鍵字查 YouTube（#171）：結果以下拉選單顯示、點選直接載入 -->
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
+            <TextBox x:Name="SearchBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                     Background="#66FFFFFF" ToolTip="Search YouTube by keywords (prefilled from the active theme)"/>
+            <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
+          </Grid>
+          <ComboBox x:Name="SearchResults" Height="34" Margin="0,6,0,0" Visibility="Collapsed"
+                    ToolTip="Pick a YouTube result to load it"/>
+
+          <!-- 或直接貼網址 -->
+          <Grid Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
             <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                     Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID"/>
+                     Background="#66FFFFFF" ToolTip="Or paste a YouTube link / 11-character video ID"/>
             <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
           </Grid>
           <TextBlock x:Name="StatusText" Margin="2,6,2,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-                     Text="Paste a YouTube video with English subtitles, then Load."/>
+                     Text="Search YouTube by keywords, or paste a link, then Load."/>
         </StackPanel>
       </Border>
 

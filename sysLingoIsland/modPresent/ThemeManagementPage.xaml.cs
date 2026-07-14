@@ -242,6 +242,7 @@ public partial class ThemeManagementPage : UserControl
             return;
         }
         NameBox.Text = _selected.Name;
+        KeywordsBox.Text = _selected.Keywords;
         DescBox.Text = _selected.Text;
         StatusLine.Text = _selected.IsActive ? "This theme is active." : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
@@ -275,6 +276,7 @@ public partial class ThemeManagementPage : UserControl
     {
         if (_selected is null) { return; }
         ThemeStore.Rename(_data, _selected.Id, NameBox.Text);
+        ThemeStore.UpdateKeywords(_data, _selected.Id, KeywordsBox.Text);
         ThemeStore.UpdateText(_data, _selected.Id, DescBox.Text);
         if (_pending is not null)
         {

@@ -45,8 +45,15 @@
               <RowDefinition Height="Auto"/>  <!-- 動作鈕 -->
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="Name" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-            <TextBox Grid.Row="1" x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
+            <StackPanel Grid.Row="0" Grid.RowSpan="2">
+              <TextBlock Text="Name" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBox x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
+              <!-- 搜尋關鍵字（#171）：供影片頁「依關鍵字查 YouTube」預填 -->
+              <TextBlock Text="Search keywords (used to find YouTube videos on the Video tab)"
+                         FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBox x:Name="KeywordsBox" Padding="6" Margin="0,4,0,10"
+                       ToolTip="e.g. Paw Patrol episode — the Video tab uses this to search YouTube"/>
+            </StackPanel>
 
             <TextBlock Grid.Row="2" Text="Theme description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
             <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,4" TextWrapping="Wrap"

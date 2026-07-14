@@ -129,8 +129,9 @@ public partial class App : System.Windows.Application
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
         // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
         var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
-            _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
-            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec));
+            _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
+            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),
+            new YtDlpVideoSearcher()); // 依關鍵字搜尋 YouTube（#171）
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
 

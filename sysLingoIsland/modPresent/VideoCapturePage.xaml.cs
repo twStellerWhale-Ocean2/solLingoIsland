@@ -23,6 +23,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly ThemeStore _themes;                           // 使用中主題（加入影片時記錄跨媒體歸屬）＋依 theme 篩選（B）
     private bool _populatingVideoFilter;                           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private readonly ISpeakerEnricher _enricher;                   // 說話人來源疊加（epic #145 增量6：AI 推斷；會用到 API、按鈕觸發）
+    private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
+    private bool _populatingResults;                               // 填搜尋結果下拉期間抑制 SelectionChanged→載入
+    private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private readonly DispatcherTimer _poll;
     private IReadOnlyList<SubtitleCue> _cues = new List<SubtitleCue>();
@@ -62,18 +65,23 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     public event Action<string>? AddToNotesRequested;
 
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
-                            ISpeakerEnricher enricher)
+                            ISpeakerEnricher enricher, IVideoSearcher searcher)
     {
         InitializeComponent();
         _fetcher = fetcher;
         _videoStore = videoStore;
         _themes = themes;
         _enricher = enricher;
+        _searcher = searcher;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
 
         LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadFromInputAsync(); }; // 載入中兼作取消
         UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
+        // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果下拉點選直接載入
+        SearchBtn.Click += (_, _) => _ = DoSearchAsync();
+        SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { _ = DoSearchAsync(); } };
+        SearchResults.SelectionChanged += (_, _) => { if (!_populatingResults) { LoadSelectedResult(); } };
         ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
@@ -99,6 +107,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         VideoList.KeyDown += (_, e) => { if (e.Key == Key.Delete) { OnDeleteVideo(); } };
         PopulateVideoThemeFilter();
         RefreshVideoList();
+        PrefillSearchFromTheme(); // #171：以使用中主題關鍵字預填搜尋框
     }
 
     /// <summary>切走 Video 分頁即停輪詢並暫停播放（免背景永久 100ms 輪詢與音訊續播）；切回恢復輪詢（不自動續播，由使用者 Continue）。</summary>
@@ -113,6 +122,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             PopulateVideoThemeFilter(); // 切回本頁重填篩選（反映主題增刪改，B）
             RefreshVideoList();
+            PrefillSearchFromTheme();    // 反映主題關鍵字（#171）
             if (_guiding && _webReady) { _poll.Start(); }
         }
     }
@@ -266,7 +276,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)
     {
-        var col = new System.Windows.Controls.StackPanel();
+        var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        sp.Children.Add(MakeThumb(it.VideoId, 56, 36)); // YouTube 縮圖（#171，比照主題清單）
+        var col = new System.Windows.Controls.StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center };
         col.Children.Add(new System.Windows.Controls.TextBlock
         {
             Text = it.Title,
@@ -281,11 +293,96 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             FontSize = 10.5,
             Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9A, 0x6A, 0x82)),
         });
-        return col;
+        sp.Children.Add(col);
+        return sp;
+    }
+
+    /// <summary>YouTube 縮圖 Image（#171）：以 <c>img.youtube.com/vi/{id}/default.jpg</c> 遠端載入；離線/失敗留空、不致命。</summary>
+    private static System.Windows.Controls.Image MakeThumb(string videoId, double w, double h)
+    {
+        var img = new System.Windows.Controls.Image
+        {
+            Width = w,
+            Height = h,
+            Stretch = System.Windows.Media.Stretch.UniformToFill,
+            Margin = new System.Windows.Thickness(0, 0, 8, 0),
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+        };
+        try { img.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri($"https://img.youtube.com/vi/{videoId}/default.jpg")); }
+        catch { /* 縮圖載入失敗留空 */ }
+        return img;
     }
 
     private static string FormatTime(string iso) =>
         DateTimeOffset.TryParse(iso, out var t) ? t.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : iso;
+
+    // ---- 依關鍵字搜尋 YouTube（#171）：結果下拉選單、點選直接載入 ----
+
+    /// <summary>以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），結果填入下拉選單（縮圖＋標題）並展開；新搜尋取代進行中者。</summary>
+    private async Task DoSearchAsync()
+    {
+        var q = SearchBox.Text?.Trim() ?? "";
+        if (q.Length == 0) { SetStatus("Type keywords to search YouTube (or paste a link and Load)."); return; }
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var ct = _searchCts.Token;
+        SearchBtn.IsEnabled = false;
+        SetStatus($"Searching YouTube for “{q}”…");
+        try
+        {
+            var results = await _searcher.SearchAsync(q, 8, ct);
+            if (ct.IsCancellationRequested) return;
+            PopulateResults(results);
+            SetStatus(results.Count > 0
+                ? $"{results.Count} result(s) — pick one to load, or paste a link and Load."
+                : "No results. Try different keywords, or paste a link.");
+        }
+        catch (SubtitleException ex) { SetStatus(ex.Message); }
+        catch (OperationCanceledException) { /* 被新搜尋取代／取消 → 靜默 */ }
+        catch (Exception ex) { SetStatus("Search failed: " + ex.Message); }
+        finally { SearchBtn.IsEnabled = true; }
+    }
+
+    private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
+    {
+        _populatingResults = true;
+        SearchResults.Items.Clear();
+        foreach (var r in results)
+        {
+            var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            sp.Children.Add(MakeThumb(r.VideoId, 44, 28));
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = r.Title,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
+                MaxWidth = 320,
+            });
+            SearchResults.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = sp, Tag = r.VideoId });
+        }
+        SearchResults.SelectedIndex = -1;
+        SearchResults.Visibility = results.Count > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        _populatingResults = false;
+        if (results.Count > 0) { SearchResults.IsDropDownOpen = true; } // 自動展開供直接點選
+    }
+
+    /// <summary>下拉選一結果→載入該影片（加入清單、記錄使用中主題）。</summary>
+    private void LoadSelectedResult()
+    {
+        var vid = (SearchResults.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
+        if (string.IsNullOrEmpty(vid)) { return; }
+        SearchResults.IsDropDownOpen = false;
+        UrlBox.Text = vid;
+        _ = LoadVideoAsync(vid, addToStore: true);
+    }
+
+    /// <summary>以使用中主題之搜尋關鍵字預填搜尋框（#171）；使用者已輸入則不覆寫。</summary>
+    private void PrefillSearchFromTheme()
+    {
+        if (!string.IsNullOrWhiteSpace(SearchBox.Text)) { return; }
+        var kw = ThemeStore.GetActive(_themes.Load())?.Keywords ?? "";
+        if (!string.IsNullOrWhiteSpace(kw)) { SearchBox.Text = kw.Trim(); }
+    }
 
     private void OnVideoSelect(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
