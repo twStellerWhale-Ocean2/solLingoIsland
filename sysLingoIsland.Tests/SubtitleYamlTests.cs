@@ -25,6 +25,21 @@ public class SubtitleYamlTests
     }
 
     [Fact]
+    public void SerializeThenParse_TrickyText_RoundTrips()
+    {
+        // 字幕真實可能出現冒號空白／前導方括號／引號／井號——YamlDotNet 序列化須自動引號，往返仍還原
+        var cues = new[]
+        {
+            C("Note: watch closely.", 1, 2, "Ryder"),
+            C("[door creaks]", 2, 3, null),
+            C("It's \"go\" time, team!", 3, 4, "Skye"),
+            C("Line with: colon and #hash", 4, 5, "Rocky"),
+        };
+        var parsed = SubtitleYaml.Parse(SubtitleYaml.Serialize(cues));
+        Assert.Equal(cues, parsed);
+    }
+
+    [Fact]
     public void Serialize_EmptyList_ReturnsEmptyString()
     {
         Assert.Equal("", SubtitleYaml.Serialize(System.Array.Empty<SubtitleCue>()));

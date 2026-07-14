@@ -12,7 +12,7 @@
 - **整檔 YAML 編修**：Edit YAML 把整份字幕攤為 YAML（`speaker`／`start`／`end`／`text`）一次修訂斷句與說話人，Apply 解析回逐句（YAML 語法錯留在編修模式明訊、續從目前播放時間到句暫停）、Cancel 放棄。新增 `SubtitleYaml` 往返序列化（新依賴 YamlDotNet 18.1.0，MIT）。
 
 ### 備註
-- 純函式（Parser 說話人解析／斷句、SubtitleYaml 往返）＋15 單元測試；全套 405 綠。
+- 純函式（Parser 說話人解析／斷句、SubtitleYaml 往返含引號強韌性）＋16 單元測試；全套 406 綠。
 - 說話人多來源疊加（AI 推斷／wiki 參照）與「指定說話人才暫停」為後續增量（epic #145 增量 6／7）。
 
 ## [2.4.0] - 2026-07-14
