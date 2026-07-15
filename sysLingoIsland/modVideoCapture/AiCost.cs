@@ -19,6 +19,12 @@ public static class AiCost
     /// <summary>web_search 工具每次呼叫之額外估計費（USD）；隨方案/模型而異，僅供概估。</summary>
     public const double WebSearchCallUsd = 0.01;
 
+    /// <summary>Whisper 語音轉文字估算單價（USD / 音訊分鐘）：whisper-1 訓練期公開參考價（$0.006/min），可能已過時、以 OpenAI 現價為準。</summary>
+    public const double WhisperUsdPerMinute = 0.006;
+
+    /// <summary>估算 Whisper 轉錄費用（USD）：音訊秒數→分鐘 × 每分鐘單價（負秒數視為 0）。純函式、可單元測試。</summary>
+    public static double EstimateWhisperUsd(double audioSeconds) => Math.Max(0, audioSeconds) / 60.0 * WhisperUsdPerMinute;
+
     /// <summary>USD→TWD 概略匯率（新台幣/美元）：僅供費用顯示換算，非即時匯率、隨市場浮動，UI 標「約」。</summary>
     public const double UsdToTwd = 32.0;
 

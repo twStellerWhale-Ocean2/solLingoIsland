@@ -151,7 +151,10 @@
                   <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="64">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <Image Source="{Binding ThumbSource}" Width="56" Height="36" Stretch="UniformToFill" VerticalAlignment="Center"/>
+                        <Image Source="{Binding ThumbSource}"
+                               Width="{Binding ThumbWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Height="{Binding ThumbHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Stretch="UniformToFill" VerticalAlignment="Center"/>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -318,8 +321,11 @@
                 <ComboBox x:Name="VideoThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
                           IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
               </StackPanel>
+              <!-- 影片標題（#187）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
+              <TextBlock x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
+                         Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"/>
               <!-- 播放中影片之超連結網址（#177）：可點開 YouTube 原頁；無載入時隱藏 -->
-              <TextBlock x:Name="WatchUrlRow" Margin="0,6,0,0" FontSize="11.5" Foreground="#9A6A82"
+              <TextBlock x:Name="WatchUrlRow" Margin="0,3,0,0" FontSize="11.5" Foreground="#9A6A82"
                          Visibility="Collapsed" TextTrimming="CharacterEllipsis">
                 <Run Text="URL: "/><Hyperlink x:Name="WatchUrlLink" RequestNavigate="OnOpenExternalLink"
                          Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink>
@@ -389,6 +395,7 @@
                 <Grid.RowDefinitions>
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <!-- 兩顆說話人來源（同疊加架構）：AI 依台詞推斷（增量6）｜🌐 網搜上網找逐字稿（增量6b） -->
                 <Grid Grid.Row="0">
@@ -403,6 +410,9 @@
                 </Grid>
                 <Button x:Name="EditYamlBtn" Grid.Row="1" Content="Edit YAML" Height="26" Margin="0,4,0,0"
                         IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
+                <!-- Whisper ASR（#187）：抓真實聲音重新轉錄，修正自動字幕時間漂移；會用金鑰＋下載音訊，跑前確認估算費用 -->
+                <Button x:Name="TranscribeBtn" Grid.Row="2" Content="&#x1F399; Re-transcribe audio" Height="26" Margin="0,4,0,0"
+                        IsEnabled="False" ToolTip="Transcribe the actual audio with OpenAI Whisper to realign subtitle timing (uses your OpenAI key + downloads audio; shows estimated cost before running)"/>
               </Grid>
 
               <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"

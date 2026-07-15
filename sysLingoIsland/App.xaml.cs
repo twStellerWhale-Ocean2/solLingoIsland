@@ -139,9 +139,11 @@ public partial class App : System.Windows.Application
             webEnricher,      // 增量6b：網搜補說話人（ISpeakerEnricher）
             webEnricher,      // #177：網路字幕可用性探測（IWebTranscriptProbe，同一顆）
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
-            new SubtitleStore()); // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
+            new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
+            new WhisperTranscriber("whisper-1", _config.TimeoutSec)); // #187：抓聲音以 Whisper 重轉字幕、修時間漂移（按鈕觸發、跑前確認費用）
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
+        _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）
 
         _main = new MainWindow(_themePage, _capturePage, _videoPage, _notesPage, _historyPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
@@ -532,6 +534,7 @@ public partial class App : System.Windows.Application
         ResultDisplaySettings.SyncFrom(_config); // #複查/#135：Dictionary 分頁結果基準字級同步（下次渲染套用）
         SubtitleDisplaySettings.SyncFrom(_config); // 影片頁字幕帶字級/粗體同步
         _videoPage?.ApplySubtitleDisplay();        // 立即套用到字幕帶（即使當前句已顯示）
+        _videoPage?.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度即時套用（選項頁調整後，#複查）
         _notesPage?.Reload(); // 門檻/條目顯示改動 → 重建卡片（intTest#36）
         _historyPage?.Reload(); // #複查：條目顯示改動同步套用歷史頁
         RegisterHotkeyOrWarn();

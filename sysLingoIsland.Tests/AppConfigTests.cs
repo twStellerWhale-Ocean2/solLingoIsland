@@ -533,4 +533,33 @@ public class AppConfigTests
         }
         finally { File.Delete(path); }
     }
+
+    // ---- 影片搜尋結果縮圖高度（#187：選項頁可調，須持久化）----
+
+    [Fact]
+    public void Load_MissingSearchThumbHeight_AppliesDefault()
+    {
+        // 舊 appsettings 無縮圖鍵 → 預設 36（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal(AppConfig.DefaultSearchThumbHeight, AppConfig.Load(path).SearchThumbHeight);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_SearchThumbHeight()
+    {
+        // 縮圖高度須寫回設定檔並讀回（回歸防護：Save 一度漏寫此鍵、改動重啟即失）
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", SearchThumbHeight: 72).Save(path);
+            Assert.Contains("paramSearchThumbHeight", File.ReadAllText(path));
+            Assert.Equal(72, AppConfig.Load(path).SearchThumbHeight);
+        }
+        finally { File.Delete(path); }
+    }
 }

@@ -27,6 +27,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly ISpeakerEnricher _webEnricher;                // 說話人來源（增量6b）：OpenAI 網搜工具上網找逐字稿（會用到 API、按鈕觸發）
     private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
+    private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
@@ -57,6 +58,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _refreshingCues;      // 重建/篩選/程式化選取期間，抑制 SelectionChanged→跳播
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
     private bool _inferring;           // AI 說話人推斷中（防重入、按鈕停用）（增量6）
+    private bool _transcribing;        // Whisper 轉錄中（防重入、按鈕停用）（#187）
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
     private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
     private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
@@ -74,7 +76,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
                             ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IWebTranscriptProbe webProbe,
-                            IVideoSearcher searcher, SubtitleStore subtitles)
+                            IVideoSearcher searcher, SubtitleStore subtitles, IAudioTranscriber transcriber)
     {
         InitializeComponent();
         _fetcher = fetcher;
@@ -84,6 +86,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _webEnricher = webEnricher;
         _webProbe = webProbe;
         _searcher = searcher;
+        _transcriber = transcriber;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
@@ -111,6 +114,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         InferSpeakersBtn.Click += (_, _) => InferSpeakers(_enricher, SpeakerSource.Dialogue);
         WebSpeakersBtn.Click += (_, _) => InferSpeakers(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
+        TranscribeBtn.Click += (_, _) => Transcribe(); // #187：Whisper 抓聲音重轉字幕（跑前確認估算費用）
         PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
@@ -222,6 +226,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         _currentVideoId = id;  // 字幕存檔鍵（#174）
         SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
+        SetVideoTitle(_videoStore.Load().Items.FirstOrDefault(i => i.VideoId == id)?.Title ?? id); // #187：先用清單標題/id，起播後以實名更新
         SubTabPlay.IsChecked = true; // #177：載入即切到「播放學習」子頁（WebView2 於此顯示、字幕在此學習）
         ClearCues();
         SubtitleBand.Inlines.Clear();
@@ -700,6 +705,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SetControls(false);
         UrlBox.Text = "";
         WatchUrlRow.Visibility = System.Windows.Visibility.Collapsed; // #177：無載入→隱藏超連結網址
+        VideoTitleText.Visibility = System.Windows.Visibility.Collapsed; // #187：無載入→隱藏標題
         UpdateVideoThemePicker(); // _currentVideoItemId null → 停用
         SetStatus("No video loaded. Search or paste a link to load one.");
     }
@@ -715,6 +721,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             if (!string.IsNullOrWhiteSpace(title))
             {
                 _currentTitle = title;                 // 增量6：供 AI 說話人推斷輔助判斷角色
+                SetVideoTitle(title);                  // #187：以播放器實名更新內容區塊標題
                 _videoStore.UpdateTitle(_currentVideoItemId, title);
                 RefreshVideoList();
             }
@@ -925,6 +932,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = has;
         WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
+        TranscribeBtn.IsEnabled = has; // #187：Whisper 重轉需有字幕載入
     }
 
     /// <summary>清空字幕與清單、關工具列（載入新片／取消時）。編修中則先退出編修 UI。</summary>
@@ -945,6 +953,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = false;
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
+        TranscribeBtn.IsEnabled = false; // #187
         PauseAtSpeaker.IsEnabled = false;
     }
 
@@ -1030,6 +1039,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = false;
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
+        TranscribeBtn.IsEnabled = false; // #187：推斷期間一併停用重轉
         var web = source == SpeakerSource.Web;
         var target = _cues;              // stale guard 基準
         var titleForAi = _currentTitle;
@@ -1063,7 +1073,70 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = enable;
         WebSpeakersBtn.IsEnabled = enable;
         EditYamlBtn.IsEnabled = enable;
+        TranscribeBtn.IsEnabled = enable; // #187
     }
+
+    /// <summary>
+    /// Whisper 音訊轉錄（#187）：抓真實聲音重新轉錄字幕、修正 YouTube 自動字幕時間漂移，使到句暫停對齊實際發音。
+    /// **會用金鑰＋下載音訊**——跑前先確認估算音訊時長、估算台幣費用與帳戶餘額說明（餘額無法以 API 金鑰讀取），
+    /// 使用者取消則不花費；確認才於 <see cref="AiActionWindow"/> 執行。成功以轉錄結果取代字幕、存回字幕存檔（#174）並附**實際**費用。
+    /// 期間停用四顆字幕來源鈕；模態阻擋主視窗故不併發換片（仍留 stale guard 保險）。
+    /// </summary>
+    private void Transcribe()
+    {
+        if (_cues.Count == 0 || _yamlEditing || _inferring || _transcribing || _loading || _currentVideoId is null) { return; }
+
+        // 跑前確認（#187：跑前顯示餘額及估算台幣費用）：以目前字幕末句時間估音訊長度→估台幣；餘額無法以 API 金鑰讀取故明示改查 usage 頁。使用者取消不花費。
+        var estSec = EstimateAudioSeconds();
+        var estTwd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(estSec));
+        var confirm = System.Windows.MessageBox.Show(
+            System.Windows.Window.GetWindow(this),
+            "以 OpenAI Whisper 重新轉錄此影片的實際語音，修正字幕時間軸（使到句暫停更準）。\n\n" +
+            $"估算音訊長度：約 {estSec / 60.0:0.#} 分鐘\n" +
+            $"估算費用：約 NT${estTwd:0.##}（Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）\n\n" +
+            "帳戶餘額無法以 API 金鑰自動讀取，請於 platform.openai.com/usage 查看。\n" +
+            "實際費用依真實音訊長度計算，完成後顯示。\n\n" +
+            "要開始轉錄嗎？",
+            "Re-transcribe audio (Whisper)",
+            System.Windows.MessageBoxButton.OKCancel,
+            System.Windows.MessageBoxImage.Question);
+        if (confirm != System.Windows.MessageBoxResult.OK) { return; }
+
+        _transcribing = true;
+        InferSpeakersBtn.IsEnabled = false;
+        WebSpeakersBtn.IsEnabled = false;
+        EditYamlBtn.IsEnabled = false;
+        TranscribeBtn.IsEnabled = false;
+        var target = _cues;                 // stale guard 基準
+        var videoId = _currentVideoId;      // 以已解析 YouTube ID 抓音訊（與字幕擷取一致，yt-dlp 接受裸 id）
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Re-transcribe audio (Whisper)",
+            async (report, ct) =>
+            {
+                var progress = new System.Progress<string>(s => report(s)); // 下載／逐塊轉錄進度→對話視窗（減少等待焦慮）
+                var result = await _transcriber.TranscribeAsync(videoId!, progress, ct);
+                if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
+                _lastPausedIndex = -1;          // 時間軸全換→暫停判定自目前時間重新起算
+                SetCues(result.Cues);
+                _isAuto = true;                 // 機器轉錄（非人工字幕）
+                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, result.Cues); } // 存轉錄結果（#174）
+                if (_rows.Count > 0) { ShowCue(0); }
+                var twd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(result.AudioSeconds));
+                report($"Done — {result.Cues.Count} line(s) transcribed from audio.");
+                report($"實際 Whisper 費用 ≈ 約 NT${twd:0.##}（{result.AudioSeconds / 60.0:0.#} 分鐘音訊；估算，以 OpenAI 現價為準）");
+                SetStatus($"Re-transcribed {result.Cues.Count} line(s) from audio — timing now follows the real speech.");
+                return null; // 費用非 token 制，改由上方訊息行呈現實際台幣費用；不回 AiUsage
+            },
+            autoCloseOnSuccess: false, showCost: false); // 費用自算並以訊息呈現，故關閉視窗內建 token 費用列
+        _transcribing = false;
+        var enable = _cues.Count > 0 && !_yamlEditing && !_loading;
+        InferSpeakersBtn.IsEnabled = enable;
+        WebSpeakersBtn.IsEnabled = enable;
+        EditYamlBtn.IsEnabled = enable;
+        TranscribeBtn.IsEnabled = enable;
+    }
+
+    /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕末句開始時間為估（字幕大致涵蓋全片）；無字幕回 0。實際時長於轉錄時由 ffprobe 取得。</summary>
+    private double EstimateAudioSeconds() => _cues.Count > 0 ? _cues[^1].StartSec : 0;
 
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
     private void EnterYamlEdit()
@@ -1079,6 +1152,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = false;
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
+        TranscribeBtn.IsEnabled = false; // #187：YAML 編修期間停用重轉
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
     }
 
@@ -1114,6 +1188,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         InferSpeakersBtn.IsEnabled = has;
         WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
+        TranscribeBtn.IsEnabled = has; // #187
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }
 
@@ -1322,6 +1397,32 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WatchUrlText.Text = url;
         WatchUrlLink.NavigateUri = new Uri(url);
         WatchUrlRow.Visibility = System.Windows.Visibility.Visible;
+    }
+
+    // 搜尋縮圖尺寸（#187，選項頁可調）：DataTemplate 之 Image 綁此 DP（AncestorType=UserControl）
+    public static readonly System.Windows.DependencyProperty ThumbHeightProperty =
+        System.Windows.DependencyProperty.Register(nameof(ThumbHeight), typeof(double), typeof(VideoCapturePage), new System.Windows.PropertyMetadata(36.0));
+    public double ThumbHeight { get => (double)GetValue(ThumbHeightProperty); set => SetValue(ThumbHeightProperty, value); }
+    public static readonly System.Windows.DependencyProperty ThumbWidthProperty =
+        System.Windows.DependencyProperty.Register(nameof(ThumbWidth), typeof(double), typeof(VideoCapturePage), new System.Windows.PropertyMetadata(64.0));
+    public double ThumbWidth { get => (double)GetValue(ThumbWidthProperty); set => SetValue(ThumbWidthProperty, value); }
+
+    /// <summary>套用搜尋縮圖高度（#187，選項頁可調 28–120）：設 Thumb 尺寸 DP（寬＝高×16/9）、縮圖欄寬與 DataGrid 列高。</summary>
+    public void ApplyThumbSize(double height)
+    {
+        var h = Math.Clamp(height, 28, 120);
+        ThumbHeight = h;
+        ThumbWidth = Math.Round(h * 16.0 / 9.0);
+        SearchResultsGrid.RowHeight = h + 8;
+        if (SearchResultsGrid.Columns.Count > 1) { SearchResultsGrid.Columns[1].Width = new System.Windows.Controls.DataGridLength(ThumbWidth + 10); } // 縮圖欄（index 1）
+    }
+
+    /// <summary>內容區塊網址之上顯示影片標題（#187）；空則隱藏。</summary>
+    private void SetVideoTitle(string? title)
+    {
+        var t = (title ?? "").Trim();
+        VideoTitleText.Text = t;
+        VideoTitleText.Visibility = t.Length > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
     }
 
     private static string Truncate(string s, int n) => string.IsNullOrEmpty(s) || s.Length <= n ? s : s.Substring(0, n) + "…";
