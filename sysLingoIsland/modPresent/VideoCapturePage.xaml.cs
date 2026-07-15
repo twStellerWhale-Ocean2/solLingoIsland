@@ -34,6 +34,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly SearchHistoryStore _searchHistory = new();     // 搜尋關鍵字歷史（#186）：搜尋框下拉、可刪
     private readonly SearchResultRecordStore _searchRecords = new();// 搜尋成果初次時間紀錄（#186）：First-seen 欄
     private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188）：還原已探測之 Manual/Auto/Web，重搜同片免重探/免重花額度
+    private readonly AiSpendLedger _spendLedger = new();             // AI 花費帳本（#189）：每次 AI 動作跑前顯示本日/本小時累計、事後記帳
     private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -633,7 +634,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
                 else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
                 _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
-                foreach (var u in result.Usages) { usd += AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0; }
+                var itemUsd = result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0);
+                usd += itemUsd;
+                _spendLedger.Record(itemUsd, DateTimeOffset.Now); // #189：花費記帳（逐列，取消時已花部分仍入帳）
                 done++;
                 SetStatus($"Auto web-check {done}/{targets.Count} — 約 NT${AiCost.ToTwd(usd):0.##} so far…");
             }
@@ -718,6 +721,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
                 else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
                 _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
+                _spendLedger.Record(result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189：花費記帳
                 return result.Usages
                     .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
                     .ToList();
@@ -1168,13 +1172,20 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     /// </summary>
     private void InferSpeakers(ISpeakerEnricher enricher, SpeakerSource source)
     {
-        if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) { return; }
+        if (_cues.Count == 0 || _yamlEditing || _inferring || _transcribing || _switchingBase || _loading) { return; }
+        var web = source == SpeakerSource.Web;
+        // #189：跑前價錢評估＋本日/本小時累計花費（本 app 記帳）；使用者取消不花費
+        if (!ConfirmAiRun(web ? "Web speaker lookup" : "AI speaker inference",
+            web ? "上網找逐字稿、為每句標註說話人（OpenAI 網搜工具；依內容長度計費）。"
+                : "由 AI 依台詞內容推測每句說話人（依內容長度計費）。",
+            EstimateSpeakerInferenceUsd(web)))
+        { return; }
         _inferring = true;
         InferSpeakersBtn.IsEnabled = false;
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
         TranscribeBtn.IsEnabled = false; // #187：推斷期間一併停用重轉
-        var web = source == SpeakerSource.Web;
+        BaseAutoBtn.IsEnabled = false; BaseManualBtn.IsEnabled = false; // #189：AI 動作期間鎖 Row1
         var target = _cues;              // stale guard 基準
         var titleForAi = _currentTitle;
         var themeForAi = CurrentThemeName(); // #所屬主題：一併給 AI 輔助判斷角色/領域、縮小網搜範圍
@@ -1197,6 +1208,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 SetStatus(filled > 0
                     ? $"{(web ? "Web lookup" : "AI")} labeled {filled} more line(s) with a speaker."
                     : $"{(web ? "Web lookup" : "AI")}: no new speaker labels for this subtitle.");
+                _spendLedger.Record(result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189：實際花費記帳
                 if (result.Usages.Count == 0) { return null; }
                 return result.Usages
                     .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
@@ -1208,6 +1220,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WebSpeakersBtn.IsEnabled = enable;
         EditYamlBtn.IsEnabled = enable;
         TranscribeBtn.IsEnabled = enable; // #187
+        UpdateBaseToggles();              // #189：恢復 Row1 狀態
     }
 
     /// <summary>
@@ -1227,7 +1240,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             System.Windows.Window.GetWindow(this),
             "以 OpenAI Whisper 重新轉錄此影片的實際語音，修正字幕時間軸（使到句暫停更準）。\n\n" +
             $"估算音訊長度：約 {estSec / 60.0:0.#} 分鐘\n" +
-            $"估算費用：約 NT${estTwd:0.##}（Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）\n\n" +
+            $"估算費用：約 NT${estTwd:0.##}（Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）\n" +
+            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(DateTimeOffset.Now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(DateTimeOffset.Now)):0.##}（本 app 記帳）\n\n" +
             "帳戶餘額無法以 API 金鑰自動讀取，請於 platform.openai.com/usage 查看。\n" +
             "實際費用依真實音訊長度計算，完成後顯示。\n\n" +
             "要開始轉錄嗎？",
@@ -1241,6 +1255,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
         TranscribeBtn.IsEnabled = false;
+        BaseAutoBtn.IsEnabled = false; BaseManualBtn.IsEnabled = false; // #189：AI 動作期間鎖 Row1
         var target = _cues;                 // stale guard 基準
         var videoId = _currentVideoId;      // 以已解析 YouTube ID 抓音訊（與字幕擷取一致，yt-dlp 接受裸 id）
         AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Re-transcribe audio (Whisper)",
@@ -1255,6 +1270,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, result.Cues); } // 存轉錄結果（#174）
                 if (_rows.Count > 0) { ShowCue(0); }
                 var twd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(result.AudioSeconds));
+                _spendLedger.Record(AiCost.EstimateWhisperUsd(result.AudioSeconds), DateTimeOffset.Now); // #189：實際花費記帳
                 report($"Done — {result.Cues.Count} line(s) transcribed from audio.");
                 report($"實際 Whisper 費用 ≈ 約 NT${twd:0.##}（{result.AudioSeconds / 60.0:0.#} 分鐘音訊；估算，以 OpenAI 現價為準）");
                 SetStatus($"Re-transcribed {result.Cues.Count} line(s) from audio — timing now follows the real speech.");
@@ -1267,10 +1283,34 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WebSpeakersBtn.IsEnabled = enable;
         EditYamlBtn.IsEnabled = enable;
         TranscribeBtn.IsEnabled = enable;
+        UpdateBaseToggles(); // #189：恢復 Row1 狀態
     }
 
     /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕末句開始時間為估（字幕大致涵蓋全片）；無字幕回 0。實際時長於轉錄時由 ffprobe 取得。</summary>
     private double EstimateAudioSeconds() => _cues.Count > 0 ? _cues[^1].StartSec : 0;
+
+    /// <summary>AI 動作跑前確認（#189）：顯示本次估算＋本日/本小時累計花費（本 app 記帳、非帳戶餘額）；按 OK 才執行、取消回 false＝不花費。</summary>
+    private bool ConfirmAiRun(string title, string whatDescription, double estUsd)
+    {
+        var now = DateTimeOffset.Now;
+        var msg = whatDescription + "\n\n" +
+            $"本次估算：約 NT${AiCost.ToTwd(estUsd):0.##}\n" +
+            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(now)):0.##}\n" +
+            "（金額為本 app 記帳與估算，非 OpenAI 帳戶餘額；餘額請上 platform.openai.com/usage 查）\n\n" +
+            "要執行嗎？";
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, title,
+            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
+    }
+
+    /// <summary>粗估說話人推斷/網搜費用（#189）：以字幕字數估 tokens × 代表性模型單價（web 另加網搜工具費）；僅供跑前概估，實際依回傳用量記帳。</summary>
+    private double EstimateSpeakerInferenceUsd(bool web)
+    {
+        var chars = _cues.Sum(c => c.Text.Length);
+        var inTok = chars / 4 + 500;          // 粗估：輸入 tokens ≈ 字元/4 ＋ prompt 額外
+        var outTok = _cues.Count * 8 + 100;   // 粗估：輸出 speakers 陣列
+        var model = web ? "gpt-4.1" : "gpt-4o-mini"; // 代表性模型（實際依設定；此為估算用）
+        return AiCost.EstimateUsd(model, inTok, outTok, web) ?? 0;
+    }
 
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
     private void EnterYamlEdit()
