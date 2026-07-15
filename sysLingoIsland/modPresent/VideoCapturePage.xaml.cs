@@ -1099,6 +1099,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
         TranscribeBtn.IsEnabled = has; // #187：Whisper 重轉需有字幕載入
+        ApplyScriptGate();             // #189：依登記之網路字幕狀態閘控 🌐 Script（已知無→停用）
     }
 
     /// <summary>清空字幕與清單、關工具列（載入新片／取消時）。編修中則先退出編修 UI。</summary>
@@ -1198,12 +1199,31 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     /// <summary>Row2 已套用之修正方法（#189）：無／🌐Script（網路逐字稿）／🧠AI（LLM 推理）。互斥——套一個即取代另一個。</summary>
     private enum Row2Method { None, Script, Analyze }
 
-    /// <summary>依已套用狀態更新 Row2/Row3 按鈕外觀（#189）：已套用者前置 ✓ 表「保持按下」。</summary>
+    /// <summary>依已套用狀態更新 Row2/Row3 按鈕外觀（#189）：已套用者前置 ✓ 表「保持按下」；並套用 🌐 Script 網路字幕狀態閘控。</summary>
     private void UpdateRefineButtons()
     {
         WebSpeakersBtn.Content = (_row2Applied == Row2Method.Script ? "✓ " : "") + ScriptLabel;
         InferSpeakersBtn.Content = (_row2Applied == Row2Method.Analyze ? "✓ " : "") + AnalyzeLabel;
         TranscribeBtn.Content = (_row3Applied ? "✓ " : "") + VoiceLabel;
+        ApplyScriptGate();
+    }
+
+    /// <summary>
+    /// 依已登記之網路字幕狀態閘控 🌐 Script 鈕（#189）：本片經探測／試跑確認**無網路逐字稿**（狀態＝none）→ 停用（免再花錢白試）；
+    /// 有（found）或尚未確認（未登記）→ 維持啟用。只會在既有啟用態上「關」、不反向強制開（避免蓋掉載入中/AI 中之停用）。
+    /// </summary>
+    private void ApplyScriptGate()
+    {
+        if (_currentVideoId is null) { return; }
+        if (_statusStore.Get(_currentVideoId)?.Web == VideoSubtitleStatusStore.WebNone)
+        {
+            WebSpeakersBtn.IsEnabled = false;
+            WebSpeakersBtn.ToolTip = "No web transcript exists for this video (checked before) — Script is off. Re-check from the search page if needed.";
+        }
+        else
+        {
+            WebSpeakersBtn.ToolTip = "Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first.";
+        }
     }
 
     /// <summary>重置 Row2/Row3 已套用狀態（#189）：換基底來源／載入新片時，管線自 Row1 重起。</summary>
@@ -1252,6 +1272,11 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 SetCues(merged);
                 if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, merged); } // 存說話人結果（#174）
                 _row2Applied = web ? Row2Method.Script : Row2Method.Analyze; // #189：標記 Row2 已套用（保持按下）
+                if (web && _currentVideoId is not null)
+                {
+                    // #189：登記本片網路字幕有無——無逐字稿時 enricher 回全 null（見 OpenAiWebSpeakerEnricher）；有任一具名即視為 found。下次據此閘控 🌐 Script。
+                    _statusStore.SaveWeb(_currentVideoId, result.Speakers.Any(s => !string.IsNullOrWhiteSpace(s)), null);
+                }
                 if (keepShown >= 0 && keepShown < _rows.Count) { ShowCue(keepShown); } // 重繪字幕帶（含新說話人前綴）
                 report(filled > 0
                     ? $"Done — labeled {filled} more line(s) with a speaker."
@@ -1472,6 +1497,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         WebSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
         TranscribeBtn.IsEnabled = has; // #187
+        ApplyScriptGate();             // #189
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }
 

@@ -437,7 +437,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="&#x1F5E3;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  <TextBlock Grid.Column="0" Text="&#x1F9D1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
                              ToolTip="標示講話人，若為 Auto 還增加修訂斷句。"/>
                   <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Script" Height="26" Margin="0,0,3,0"
                           IsEnabled="False" ToolTip="Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
