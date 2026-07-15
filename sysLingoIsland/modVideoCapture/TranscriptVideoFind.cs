@@ -21,6 +21,8 @@ public static class TranscriptVideoFind
         var sb = new StringBuilder();
         sb.Append("請【上網搜尋】找出最多 ").Append(max).Append(" 支**有公開逐字稿可用**的 YouTube 英語學習影片，主題為：").Append(topic.Trim()).Append('。');
         sb.Append("「有逐字稿可用」指網路上（官方腳本、熱門 fandom wiki、逐字稿網站等公評良好來源）找得到該影片**完整、且看得出說話者**之逐字稿。");
+        sb.Append("若某來源系統性地為整個系列／頻道提供逐字稿（例如卡通的 fandom wiki、TED‑Ed／TED 的 ted.com、影集的逐字稿站），");
+        sb.Append("請盡量從中列出**多支不同**且知名的真實影片、湊到接近 ").Append(max).Append(" 支——但每支都必須是**真實存在**、且該來源確實有其逐字稿者，寧缺勿杜撰。");
         if (!string.IsNullOrWhiteSpace(videoTheme)) { sb.Append("\n所屬主題／分類（縮小範圍）：").Append(videoTheme!.Trim()); }
         sb.Append("\n每支請給：title（影片標題）、youtube_url（該影片的 YouTube 連結或 11 碼影片 ID；不確定就填空字串，不要亂猜）、source（逐字稿來源網址或名稱）。");
         sb.Append("\n只回傳 JSON：{\"videos\":[{\"title\":\"…\",\"youtube_url\":\"…\",\"source\":\"…\"}]}。找不到就回 {\"videos\":[]}。不要輸出任何搜尋過程／思考／說明文字。");
