@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             xmlns:local="clr-namespace:LingoIsland.Present"
              Background="Transparent">
   <UserControl.Resources>
     <!-- 標準表格控制項 DataGrid 主題（#177）：透明底、粉表頭、細列分隔、粉選取；欄可拖曳調寬/排序/重排（內建） -->
@@ -64,8 +65,10 @@
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="SearchBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                     Background="#66FFFFFF" ToolTip="Type keywords (prefilled from the active theme), then Search"/>
+            <!-- 搜尋框：可編輯 ComboBox，下拉顯示關鍵字歷史（#186）；↑↓ 選、Delete 刪該筆 -->
+            <ComboBox x:Name="SearchBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
+                      IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
+                      ToolTip="Type keywords (or pick from history); ↑↓ then Delete removes a history entry"/>
             <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
           </Grid>
           <!-- 搜尋選項（#184）：上傳日期（伺服器端 sp 篩）｜長度（client 依片長篩）｜最多筆數｜自動網搜前 N 筆（預設開、花額度） -->
@@ -172,6 +175,17 @@
                       </Style>
                     </DataGridTextColumn.ElementStyle>
                   </DataGridTextColumn>
+                  <!-- 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即按時間排序 -->
+                  <DataGridTextColumn Header="First seen" Binding="{Binding FirstSeen}" SortMemberPath="FirstSeen" MinWidth="96">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Foreground" Value="#9A6A82"/>
+                        <Setter Property="FontSize" Value="11"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
                   <!-- 連結（開 YouTube 原頁） -->
                   <DataGridTemplateColumn Header="Link" CanUserSort="False" CanUserResize="False" MinWidth="56">
                     <DataGridTemplateColumn.CellTemplate>
@@ -186,16 +200,22 @@
                   <DataGridTemplateColumn Header="Manual" SortMemberPath="ManualRank" CanUserResize="False" MinWidth="52">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <TextBlock Text="{Binding ManualText}" Foreground="{Binding ManualBrush}" FontWeight="SemiBold"
-                                   FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Human-made subtitles"/>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
+                          <TextBlock Text="{Binding ManualText}" Foreground="{Binding ManualBrush}" FontWeight="SemiBold"
+                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Human-made subtitles"/>
+                        </Grid>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
                   <DataGridTemplateColumn Header="Auto" SortMemberPath="AutoRank" CanUserResize="False" MinWidth="46">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <TextBlock Text="{Binding AutoText}" Foreground="{Binding AutoBrush}" FontWeight="SemiBold"
-                                   FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Auto-generated captions"/>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
+                          <TextBlock Text="{Binding AutoText}" Foreground="{Binding AutoBrush}" FontWeight="SemiBold"
+                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Auto-generated captions"/>
+                        </Grid>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -207,6 +227,7 @@
                                   Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
                                   FontSize="11" Padding="6,2" Cursor="Hand"
                                   ToolTip="Check the web for a transcript (uses your OpenAI key; costs a small fee)"/>
+                          <local:Spinner Width="14" Height="14" Foreground="#1565C0" Visibility="{Binding WebCheckingVisibility}"/>
                           <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
                                      FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
                         </Grid>
@@ -321,7 +342,14 @@
               </Grid.RowDefinitions>
 
               <Border Grid.Row="0" Background="Black" CornerRadius="6" ClipToBounds="True">
-                <wv2:WebView2 x:Name="Web"/>
+                <Grid>
+                  <wv2:WebView2 x:Name="Web"/>
+                  <!-- 載入等待動畫（#186）：載入中收起 WebView2（避 airspace 遮住）、於黑底顯旋轉沙漏 -->
+                  <StackPanel x:Name="LoadOverlay" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <local:Spinner Width="48" Height="48" Foreground="White"/>
+                    <TextBlock Text="Loading…" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0" FontSize="13"/>
+                  </StackPanel>
+                </Grid>
               </Border>
 
               <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"

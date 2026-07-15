@@ -30,6 +30,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
+    private readonly SearchHistoryStore _searchHistory = new();     // 搜尋關鍵字歷史（#186）：搜尋框下拉、可刪
+    private readonly SearchResultRecordStore _searchRecords = new();// 搜尋成果初次時間紀錄（#186）：First-seen 欄
     private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -92,7 +94,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
         // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果以表格呈現，點名稱載入、點連結開原頁、按需查網路字幕（#177）
         SearchBtn.Click += (_, _) => DoSearch();
-        SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { DoSearch(); } };
+        SearchBox.DropDownOpened += (_, _) => SearchBox.ItemsSource = _searchHistory.Load(); // #186：開下拉時填入關鍵字歷史
+        SearchBox.PreviewKeyDown += OnSearchBoxKey;                                            // Enter 搜尋、Delete 刪選中歷史
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
@@ -256,10 +259,10 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     _currentVideoItemId = vi.Id;
                     RefreshVideoList();
                 }
-                // 「逐句暫停」成功訊息延到 OnPoll 確認實際起播才顯示——避免可嵌入被禁／無效影片時謊報成功。
+                // #186：不自動播放。就緒訊息延到 OnPoll 確認播放器 ready 才顯（避免可嵌入被禁/無效影片時謊報）。
                 SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — starting playback…"
-                    : $"{_cues.Count} subtitle lines fetched — starting playback…");
+                    ? $"{_cues.Count} auto-generated caption lines — loading player…"
+                    : $"{_cues.Count} subtitle lines fetched — loading player…");
             }
             else
             {
@@ -399,6 +402,22 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     // ---- 依關鍵字搜尋 YouTube（#171）：結果下拉選單、點選直接載入 ----
 
+    /// <summary>搜尋框按鍵（#186）：Enter＝搜尋（收下拉）；下拉開啟時 Delete＝刪除目前選中之歷史筆並刷新下拉。</summary>
+    private void OnSearchBoxKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            DoSearch();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && SearchBox.IsDropDownOpen && SearchBox.SelectedItem is string q && q.Length > 0)
+        {
+            _searchHistory.Delete(q);
+            SearchBox.ItemsSource = _searchHistory.Load(); // 刷新下拉，反映刪除
+            e.Handled = true;
+        }
+    }
+
     /// <summary>
     /// 以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），套搜尋選項（上傳日期 sp 篩／長度 client 篩／最多筆數）；
     /// 於**進度提示視窗**內執行 yt-dlp 搜尋（顯進度、完成自動關、減少等待焦慮，#185），完成後填表；
@@ -408,6 +427,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     {
         var q = SearchBox.Text?.Trim() ?? "";
         if (q.Length == 0) { SetStatus("Type keywords to search YouTube (or paste a link and Load)."); return; }
+        _searchHistory.Add(q);       // #186：記入關鍵字歷史（置頂去重）
+        SearchBox.IsDropDownOpen = false;
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource(); // 背景探測/自動網搜用（新搜尋取消）
         var dateToken = (DateFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
@@ -443,7 +464,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>把搜尋結果填入可排序/過濾表格（#177）：即時顯示縮圖/名稱/連結/片長/推薦星等；內嵌字幕背景逐列免費探測填入；預設依推薦分排序。</summary>
     private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
     {
-        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec)).ToList();
+        var firstSeen = _searchRecords.RecordAndGet(results.Select(r => r.VideoId).ToList(), DateTimeOffset.Now); // #186：記/取初次搜尋時間
+        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec,
+            firstSeen.TryGetValue(r.VideoId, out var fs) ? fs : DateTimeOffset.Now)).ToList();
         RefreshLoadedFlags();                                                            // 依現有影片清單標示「已加入」（灰）
         _searchView = new System.Windows.Data.ListCollectionView(_searchRows);
         ApplyDefaultSort();                                                              // 預設：推薦分遞減、同分短片優先
@@ -713,7 +736,7 @@ var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe
 document.head.appendChild(tag);
 function onYouTubeIframeAPIReady(){player=new YT.Player('p',{height:'100%',width:'100%',videoId:vid,
  playerVars:{'playsinline':1,'rel':0,'modestbranding':1,'origin':location.origin},
- events:{'onReady':function(){ready=true;player.playVideo();},
+ events:{'onReady':function(){ready=true;},
          'onError':function(e){lastErr=e.data;}}});}
 window.li_time=function(){return (ready&&player&&player.getCurrentTime)?player.getCurrentTime():-1;};
 window.li_title=function(){return (ready&&player&&player.getVideoData)?(player.getVideoData().title||''):'';};
@@ -745,13 +768,14 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var t)) return;
             if (t < 0) return;
 
-            if (!_playbackStarted) // 確認實際起播後才宣稱「逐句暫停」
+            if (!_playbackStarted) // 播放器就緒（#186：不自動播放）→ 顯首句、啟用控制、提示按 Continue 開始
             {
                 _playbackStarted = true;
-                _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：起播後自播放器取標題回寫影片清單
+                _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：就緒後自播放器取標題回寫影片清單
+                ShowCue(0);                         // 顯示第一句＋啟用控制鈕（不自動播放）
                 SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — playback pauses at each line; tap a word to look it up."
-                    : $"{_cues.Count} subtitle lines loaded — playback pauses at each line; tap a word to look it up.");
+                    ? $"{_cues.Count} auto-generated lines — press ▶ Continue or double-click a line to play (pauses at each line)."
+                    : $"{_cues.Count} lines loaded — press ▶ Continue or double-click a line to play (pauses at each line).");
             }
 
             var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker); // 指定說話人才暫停（增量7）
@@ -1141,8 +1165,9 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public System.Windows.Media.ImageSource? ThumbSource { get; }
         public int? DurationSec { get; }            // 排序鍵（片長，秒；未知＝null 排末）
         public string DurationText { get; }         // 顯示（m:ss／h:mm:ss／—）
+        public string FirstSeen { get; }            // 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即可排序
 
-        public SearchRow(string videoId, string title, int? durationSec)
+        public SearchRow(string videoId, string title, int? durationSec, DateTimeOffset firstSeen)
         {
             VideoId = videoId;
             Title = title;
@@ -1151,6 +1176,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             ThumbSource = MakeThumbSource(videoId);
             DurationSec = durationSec;
             DurationText = FormatDuration(durationSec);
+            FirstSeen = firstSeen.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
             RecomputeRecommend(null, null); // 初始（字幕未探測）＝暫定推薦分，探測完成後重算
         }
 
@@ -1166,32 +1192,36 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             On(nameof(LoadText));
         }
 
-        // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；符號 …(查中)／✓(有)／–(無)／?(不明)
-        private string _manualText = "…";
+        // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；探測中顯旋轉動畫、完成後符號 ✓(有)／–(無)／?(不明)（#186）
+        private string _manualText = "";
         public string ManualText { get => _manualText; private set { _manualText = value; On(); } }
         private System.Windows.Media.Brush _manualBrush = EmbGray;
         public System.Windows.Media.Brush ManualBrush { get => _manualBrush; private set { _manualBrush = value; On(); } }
-        private string _autoText = "…";
+        private string _autoText = "";
         public string AutoText { get => _autoText; private set { _autoText = value; On(); } }
         private System.Windows.Media.Brush _autoBrush = EmbGray;
         public System.Windows.Media.Brush AutoBrush { get => _autoBrush; private set { _autoBrush = value; On(); } }
+        private System.Windows.Visibility _embeddedSpinnerVisibility = System.Windows.Visibility.Visible; // 探測中顯 spinner（#186）
+        public System.Windows.Visibility EmbeddedSpinnerVisibility { get => _embeddedSpinnerVisibility; private set { _embeddedSpinnerVisibility = value; On(); } }
         // 排序鍵（數值，供 CollectionView 排序）：1 有／0 無／-1 未知或失敗
         private int _manualRank = -1;
         public int ManualRank { get => _manualRank; private set { _manualRank = value; On(); } }
         private int _autoRank = -1;
         public int AutoRank { get => _autoRank; private set { _autoRank = value; On(); } }
-        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰），更新排序鍵並重算推薦分。</summary>
+        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰），停 spinner、更新排序鍵並重算推薦分。</summary>
         public void SetEmbedded(bool hasManual, bool hasAuto)
         {
             ManualText = hasManual ? "✓" : "–"; ManualBrush = hasManual ? EmbGreen : EmbGray; ManualRank = hasManual ? 1 : 0;
             AutoText = hasAuto ? "✓" : "–"; AutoBrush = hasAuto ? EmbAmber : EmbGray; AutoRank = hasAuto ? 1 : 0;
+            EmbeddedSpinnerVisibility = System.Windows.Visibility.Collapsed;
             RecomputeRecommend(hasManual, hasAuto);
         }
-        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」（排序鍵 -1、推薦分視為未知）。</summary>
+        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」（停 spinner、排序鍵 -1、推薦分視為未知）。</summary>
         public void SetEmbeddedUnknown()
         {
             ManualText = "?"; ManualBrush = EmbGray; ManualRank = -1;
             AutoText = "?"; AutoBrush = EmbGray; AutoRank = -1;
+            EmbeddedSpinnerVisibility = System.Windows.Visibility.Collapsed;
             RecomputeRecommend(null, null);
         }
 
@@ -1212,19 +1242,22 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public string WebResultTip { get => _webResultTip; private set { _webResultTip = value; On(); } }
         private int _webRank; // 排序鍵：1 有／-1 無／0 未查
         public int WebRank { get => _webRank; private set { _webRank = value; On(); } }
+        private System.Windows.Visibility _webCheckingVisibility = System.Windows.Visibility.Collapsed; // 查中顯 spinner（#186）
+        public System.Windows.Visibility WebCheckingVisibility { get => _webCheckingVisibility; private set { _webCheckingVisibility = value; On(); } }
 
-        /// <summary>切到「查中」：按鈕變「…」且停用。</summary>
-        public void SetWebChecking() { WebButtonText = "…"; WebButtonEnabled = false; }
-        /// <summary>切到「完成」：隱藏按鈕、顯示結果符號（✓有／✗無），來源置 tooltip，更新排序鍵。</summary>
+        /// <summary>切到「查中」：隱藏按鈕、顯旋轉動畫（#186）。</summary>
+        public void SetWebChecking() { WebButtonVisibility = System.Windows.Visibility.Collapsed; WebCheckingVisibility = System.Windows.Visibility.Visible; }
+        /// <summary>切到「完成」：隱藏按鈕/spinner、顯示結果符號（✓有／✗無），來源置 tooltip，更新排序鍵。</summary>
         public void SetWebResult(string text, System.Windows.Media.Brush brush, string tip, bool found)
         {
             WebButtonVisibility = System.Windows.Visibility.Collapsed;
+            WebCheckingVisibility = System.Windows.Visibility.Collapsed;
             WebResultText = text; WebResultBrush = brush; WebResultTip = tip;
             WebResultVisibility = System.Windows.Visibility.Visible;
             WebRank = found ? 1 : -1;
         }
-        /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
-        public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; }
+        /// <summary>還原按鈕（取消/失敗後供再試）：隱藏 spinner、顯示 Check 鈕。</summary>
+        public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; WebCheckingVisibility = System.Windows.Visibility.Collapsed; WebButtonVisibility = System.Windows.Visibility.Visible; }
 
         // ── 推薦優序（#177／#183，第一欄）：規則＝字幕品質（Manual>Auto>無）＋片長適學度；分數 1–5，以彩色圓標呈現（5＝最佳、綠；3＝琥珀；低＝灰）——比星等更好懂、仍可排序 ──
         private double _recommendScore;
@@ -1313,6 +1346,9 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _loading = loading;
         UrlBox.IsEnabled = !loading;
         LoadBtn.Content = loading ? "Cancel" : "Load"; // LoadBtn 保持可按：載入中按下即取消抓字幕
+        // 載入等待動畫（#186）：載入中顯旋轉沙漏、收起 WebView2（避 airspace 遮住 WPF 疊層）
+        LoadOverlay.Visibility = loading ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        Web.Visibility = loading ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
     }
 
     private void SetControls(bool enabled)
