@@ -72,6 +72,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private const string VoiceLabel = "\U0001F399 Voice";    // 🎙
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
     private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
+    private bool _pauseNoSpeaker;      // #189：只在未標示（unknown）之句暫停（Pause-at 選 (no speaker)）
     private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
     private const string AllSpeakers = "All speakers";
     private const string NoSpeaker = "(no speaker)";
@@ -929,7 +930,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                     : $"{_cues.Count} lines loaded — press ▶ Continue or double-click a line to play (pauses at each line).");
             }
 
-            var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker); // 指定說話人才暫停（增量7）
+            var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker, pauseNoSpeaker: _pauseNoSpeaker); // 指定說話人（或未標示者）才暫停（增量7／#189）
             if (pause >= 0)
             {
                 _lastPausedIndex = pause;
@@ -970,6 +971,15 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     /// <summary>固定字幕說話人前綴（#189）：「名: 」;未知（空/空白）一律標「unknown: 」。字幕帶與清單共用,格式一致、不再混亂。</summary>
     private static string SpeakerLabelOf(string? speaker) =>
         (string.IsNullOrWhiteSpace(speaker) ? "unknown" : speaker) + ": ";
+
+    /// <summary>字幕清單時間標（#189）：cue 起始秒→「m:ss」，超過一小時→「h:mm:ss」；負值視為 0。</summary>
+    private static string FormatPos(double sec)
+    {
+        var ts = TimeSpan.FromSeconds(Math.Max(0, sec));
+        return ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
 
     /// <summary>右鍵「Copy line」複製目前字幕帶那一句台詞（#189；字幕帶字可點查詞，故以右鍵複製取代拖選）。</summary>
     private void OnCopySubtitleLine(object sender, System.Windows.RoutedEventArgs e)
@@ -1115,6 +1125,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _refreshingCues = false;
         _speakerFilter = null; _filterNoSpeaker = false;
         _pauseSpeaker = null;
+        _pauseNoSpeaker = false; // #189
         _populatingPauseAt = true; PauseAtSpeaker.Items.Clear(); _populatingPauseAt = false;
         SpeakerFilter.IsEnabled = false;
         InferSpeakersBtn.IsEnabled = false;
@@ -1168,29 +1179,35 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
 
     // ---- 指定說話人才暫停（增量7）：Everyone＋各具名說話人；選定後導引播放只在該說話人之句到句暫停 ----
 
-    /// <summary>重填 Pause-at 下拉：Everyone＋各具名說話人（去重排序）；保留選取（該說話人已無則回 Everyone）；無具名說話人則停用。</summary>
+    /// <summary>重填 Pause-at 下拉：Everyone＋各具名說話人（去重排序）＋（有具名又有未標示句時）「(no speaker)」；保留選取（原選項已無則回 Everyone）；無具名說話人則停用。</summary>
     private void PopulatePauseAtSpeaker()
     {
         _populatingPauseAt = true;
-        var prev = _pauseSpeaker;
+        // 以目前選項文字保留（含 (no speaker)）；下拉尚未建時由狀態反推
+        var prevSel = PauseAtSpeaker.SelectedItem as string ?? (_pauseNoSpeaker ? NoSpeaker : _pauseSpeaker) ?? EveryoneSpeaker;
         PauseAtSpeaker.Items.Clear();
         PauseAtSpeaker.Items.Add(EveryoneSpeaker);
         var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
         foreach (var n in names) PauseAtSpeaker.Items.Add(n);
-        var idx = prev is null ? 0 : PauseAtSpeaker.Items.IndexOf(prev);
+        // #189：有具名又有未標示句時，另加「只在未標示（unknown）之句暫停」選項
+        if (names.Count > 0 && _cues.Any(c => string.IsNullOrEmpty(c.Speaker))) { PauseAtSpeaker.Items.Add(NoSpeaker); }
+        var idx = PauseAtSpeaker.Items.IndexOf(prevSel);
         PauseAtSpeaker.SelectedIndex = idx >= 0 ? idx : 0;
-        _pauseSpeaker = PauseAtSpeaker.SelectedIndex <= 0 ? null : prev;
+        ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string); // 依還原後之選項設定 _pauseSpeaker／_pauseNoSpeaker
         PauseAtSpeaker.IsEnabled = names.Count > 0; // 有具名說話人才有意義
         _populatingPauseAt = false;
     }
 
-    /// <summary>下拉改變→設定「指定說話人才暫停」（Everyone＝null＝全部暫停）。</summary>
-    private void ApplyPauseAtSpeaker()
+    /// <summary>下拉改變→設定暫停對象（Everyone＝全部；具名＝該說話人；(no speaker)＝只在未標示之句暫停）。</summary>
+    private void ApplyPauseAtSpeaker() => ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string);
+
+    /// <summary>依 Pause-at 選項字串設定 _pauseSpeaker／_pauseNoSpeaker（#189）。</summary>
+    private void ApplyPauseAtSelection(string? sel)
     {
-        var sel = PauseAtSpeaker.SelectedItem as string;
-        _pauseSpeaker = (sel is null || sel == EveryoneSpeaker) ? null : sel;
+        _pauseNoSpeaker = sel == NoSpeaker;
+        _pauseSpeaker = (sel is null || sel == EveryoneSpeaker || sel == NoSpeaker) ? null : sel;
     }
 
     /// <summary>說話人來源：依台詞 AI 推斷（增量6）或 OpenAI 網搜上網找逐字稿（增量6b）。</summary>
@@ -1526,6 +1543,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public CueRow(int index, SubtitleCue cue) { Index = index; Cue = cue; }
         public int Index { get; }
         public SubtitleCue Cue { get; }
+        /// <summary>時間標（#189）：cue 起始位置「m:ss」（超過一小時「h:mm:ss」）＋兩空白，置於說話人之前、清單以淡色 Run 呈現。</summary>
+        public string TimeLabel => FormatPos(Cue.StartSec) + "  ";
         /// <summary>說話人前綴（固定「名: 」;未知＝「unknown: 」,#189）——清單以粗體 Run 呈現。</summary>
         public string SpeakerLabel => SpeakerLabelOf(Cue.Speaker);
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>

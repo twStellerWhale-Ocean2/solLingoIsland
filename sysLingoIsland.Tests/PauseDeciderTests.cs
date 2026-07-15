@@ -165,4 +165,33 @@ public class PauseDeciderTests
         Assert.False(PauseDecider.SpeakerMatches("Ryder", "Zuma"));
         Assert.False(PauseDecider.SpeakerMatches("Ryder", null));
     }
+
+    // ── 只在未標示（unknown）之句暫停（#189）──
+    private static readonly List<SubtitleCue> Mixed = new()
+    {
+        new SubtitleCue("a", 1.0, "Ryder"), // 具名
+        new SubtitleCue("b", 3.0),           // 未標示
+        new SubtitleCue("c", 5.0, "Zuma"),  // 具名
+        new SubtitleCue("d", 20.0),          // 未標示
+    };
+
+    [Fact]
+    public void NextPause_PauseNoSpeaker_OnlyPausesAtUnlabeled_SkipsLabeled()
+    {
+        Assert.Equal(-1, PauseDecider.NextPause(4.9, Mixed, -1, pauseNoSpeaker: true));
+        Assert.Equal(1, PauseDecider.NextPause(5.0, Mixed, -1, pauseNoSpeaker: true));   // 跳過 a(Ryder)、於 b 暫停（暫停點＝c 開始 5）
+        Assert.Equal(3, PauseDecider.NextPause(28.0, Mixed, 1, pauseNoSpeaker: true));   // 跳過 c(Zuma)、於末句 d 暫停（20+8）
+        Assert.Equal(-1, PauseDecider.NextPause(999.0, Mixed, 3, pauseNoSpeaker: true)); // d 後無未標示句
+    }
+
+    [Fact]
+    public void PauseMatches_NoSpeaker_MatchesOnlyEmpty()
+    {
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: true, null));    // 未標示→符合
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: true, ""));
+        Assert.False(PauseDecider.PauseMatches(null, noSpeaker: true, "Ryder")); // 有名→不符合
+        Assert.True(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Ryder")); // noSpeaker=false 沿用 SpeakerMatches
+        Assert.False(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Zuma"));
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: false, "anyone"));
+    }
 }

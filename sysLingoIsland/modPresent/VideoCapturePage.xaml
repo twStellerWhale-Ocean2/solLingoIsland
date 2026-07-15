@@ -470,7 +470,7 @@
                         <ContextMenu>
                           <MenuItem Header="Copy line" Click="OnCopyCueLine"/>
                         </ContextMenu>
-                      </TextBlock.ContextMenu><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
+                      </TextBlock.ContextMenu><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
