@@ -29,6 +29,29 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- 可排序欄位表頭鈕（#177）：透明、粉字、hover 淡底；點擊排序（箭頭由碼後綴） -->
+    <Style x:Key="ColHeader" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="#B0578D"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="3,1"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="hb" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="hb" Property="Background" Value="#22B0578D"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </UserControl.Resources>
   <!-- 統一版面（#167／#177）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝兩子頁籤（搜尋下載／播放學習）＋共用狀態列 -->
   <Grid Margin="10">
@@ -106,55 +129,74 @@
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
-              <!-- 表頭 -->
-              <Grid Grid.Row="0" Margin="8,6,8,2">
+              <!-- 過濾（依標題即時篩選，#177） -->
+              <Grid Grid.Row="0" Margin="8,6,8,4">
+                <TextBox x:Name="ResultFilterBox" Height="26" VerticalContentAlignment="Center" Padding="6,0"
+                         Background="#66FFFFFF" TextChanged="OnResultFilterChanged" ToolTip="Filter results by title"/>
+                <TextBlock x:Name="FilterPlaceholder" Text="&#x1F50D; Filter by title…" Foreground="#9A6A82" FontSize="11.5"
+                           Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+              </Grid>
+              <!-- 表頭（可點排序；箭頭示目前排序欄與方向，#177） -->
+              <Grid Grid.Row="1" Margin="8,2,8,2">
                 <Grid.ColumnDefinitions>
+                  <ColumnDefinition SharedSizeGroup="RecCol"/>
                   <ColumnDefinition SharedSizeGroup="ThumbCol"/>
                   <ColumnDefinition Width="*"/>
+                  <ColumnDefinition SharedSizeGroup="TimeCol"/>
                   <ColumnDefinition SharedSizeGroup="LinkCol"/>
                   <ColumnDefinition SharedSizeGroup="ManualCol"/>
                   <ColumnDefinition SharedSizeGroup="AutoCol"/>
                   <ColumnDefinition SharedSizeGroup="WebCol"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="Title &#x2022; click to load" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2" Text="Link" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0"/>
-                <TextBlock Grid.Column="3" Text="Manual" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="Human-made subtitles on the video — best for learning (free to check)"/>
-                <TextBlock Grid.Column="4" Text="Auto" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="YouTube auto-generated (machine) captions (free to check)"/>
-                <TextBlock Grid.Column="5" Text="Web" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="Transcript findable online (checked on demand; uses your OpenAI key)"/>
+                <Button x:Name="HdrRec" Grid.Column="0" Style="{StaticResource ColHeader}" Tag="RecommendScore" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="&#x2605; Rec" ToolTip="Recommended priority (default sort) — from subtitle quality + length. Click any header to sort."/>
+                <Button x:Name="HdrTitle" Grid.Column="2" Style="{StaticResource ColHeader}" Tag="Title" Click="OnSortHeader" HorizontalContentAlignment="Left" Content="Title" ToolTip="Video title — click a row to load; click header to sort A–Z"/>
+                <Button x:Name="HdrTime" Grid.Column="3" Style="{StaticResource ColHeader}" Tag="DurationSec" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Time" ToolTip="Length — click to sort (shorter first)"/>
+                <TextBlock Grid.Column="4" Text="Link" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,0"/>
+                <Button x:Name="HdrManual" Grid.Column="5" Style="{StaticResource ColHeader}" Tag="ManualRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Manual" ToolTip="Human-made subtitles (best); click to sort"/>
+                <Button x:Name="HdrAuto" Grid.Column="6" Style="{StaticResource ColHeader}" Tag="AutoRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Auto" ToolTip="Auto captions; click to sort"/>
+                <Button x:Name="HdrWeb" Grid.Column="7" Style="{StaticResource ColHeader}" Tag="WebRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Web" ToolTip="Web transcript (checked on demand); click to sort"/>
               </Grid>
-              <ScrollViewer Grid.Row="1" MaxHeight="360" VerticalScrollBarVisibility="Auto">
+              <ScrollViewer Grid.Row="2" MaxHeight="340" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="SearchResultsTable">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
                       <Border BorderBrush="#22B0578D" BorderThickness="0,1,0,0" Padding="0,3">
                         <Grid Margin="8,0">
                           <Grid.ColumnDefinitions>
+                            <ColumnDefinition SharedSizeGroup="RecCol"/>
                             <ColumnDefinition SharedSizeGroup="ThumbCol"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition SharedSizeGroup="TimeCol"/>
                             <ColumnDefinition SharedSizeGroup="LinkCol"/>
                             <ColumnDefinition SharedSizeGroup="ManualCol"/>
                             <ColumnDefinition SharedSizeGroup="AutoCol"/>
                             <ColumnDefinition SharedSizeGroup="WebCol"/>
                           </Grid.ColumnDefinitions>
-                          <Image Grid.Column="0" Source="{Binding ThumbSource}" Width="56" Height="36"
+                          <!-- 推薦優序（第一欄，#177）：星等由規則算（字幕品質＋片長），預設以此排序 -->
+                          <TextBlock Grid.Column="0" Text="{Binding RecommendStars}" ToolTip="{Binding RecommendTip}"
+                                     Foreground="#E0A82E" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="4,0"/>
+                          <Image Grid.Column="1" Source="{Binding ThumbSource}" Width="56" Height="36"
                                  Stretch="UniformToFill" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                          <Button Grid.Column="1" Content="{Binding Title}" Click="OnSearchRowLoad" Cursor="Hand"
+                          <Button Grid.Column="2" Content="{Binding Title}" Click="OnSearchRowLoad" Cursor="Hand"
                                   HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0"
                                   Foreground="#3A2C33" Padding="2" VerticalAlignment="Center"
                                   ToolTip="Load this video into the player"/>
-                          <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="6,0">
+                          <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#6D3A4D"
+                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5" Margin="6,0"/>
+                          <TextBlock Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="6,0">
                             <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink"
                                        ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
                           </TextBlock>
                           <!-- 三種字幕狀態徽章：Manual(綠)｜Auto(琥珀) 免費自動填；Web(藍) 逐列按需查 -->
-                          <TextBlock Grid.Column="3" Text="{Binding ManualText}" Foreground="{Binding ManualBrush}"
+                          <TextBlock Grid.Column="5" Text="{Binding ManualText}" Foreground="{Binding ManualBrush}"
                                      VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
                                      ToolTip="Human-made subtitles"/>
-                          <TextBlock Grid.Column="4" Text="{Binding AutoText}" Foreground="{Binding AutoBrush}"
+                          <TextBlock Grid.Column="6" Text="{Binding AutoText}" Foreground="{Binding AutoBrush}"
                                      VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
                                      ToolTip="Auto-generated captions"/>
-                          <Grid Grid.Column="5" Margin="6,0" VerticalAlignment="Center" HorizontalAlignment="Center">
+                          <Grid Grid.Column="7" Margin="6,0" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
                                     Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
                                     FontSize="11" Padding="6,2" Cursor="Hand"

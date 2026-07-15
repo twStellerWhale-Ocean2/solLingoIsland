@@ -55,7 +55,13 @@ public sealed class YtDlpVideoSearcher : IVideoSearcher
                 var id = r.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : null;
                 if (string.IsNullOrWhiteSpace(id)) continue;
                 var title = r.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-                list.Add(new VideoSearchResult(id!, string.IsNullOrWhiteSpace(title) ? id!.Trim() : title!.Trim()));
+                int? dur = null; // yt-dlp 之 duration（秒，數字；直播/未知則缺或 0）→ null
+                if (r.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number
+                    && d.TryGetDouble(out var ds) && ds > 0)
+                {
+                    dur = (int)Math.Round(ds);
+                }
+                list.Add(new VideoSearchResult(id!, string.IsNullOrWhiteSpace(title) ? id!.Trim() : title!.Trim(), dur));
             }
             catch (JsonException)
             {

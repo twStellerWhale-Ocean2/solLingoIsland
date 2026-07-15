@@ -1,7 +1,7 @@
 namespace LingoIsland.Video;
 
-/// <summary>YouTube 搜尋結果一筆（[techItem字幕擷取] 延伸，#171）：影片 ID＋標題。縮圖由 UI 依 ID 組 YouTube 縮圖 URL 載入。</summary>
-public sealed record VideoSearchResult(string VideoId, string Title);
+/// <summary>YouTube 搜尋結果一筆（[techItem字幕擷取] 延伸，#171／#177）：影片 ID＋標題＋片長秒數（<see cref="DurationSec"/>，直播/未知為 null）。縮圖由 UI 依 ID 組 YouTube 縮圖 URL 載入。</summary>
+public sealed record VideoSearchResult(string VideoId, string Title, int? DurationSec = null);
 
 /// <summary>
 /// 依關鍵字搜尋 YouTube 影片（#171）：供影片頁「依主題搜尋關鍵字查 YouTube、選單點選載入」。

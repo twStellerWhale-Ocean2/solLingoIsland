@@ -28,7 +28,10 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
-    private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/內嵌+網路字幕狀態
+    private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
+    private System.Windows.Data.ListCollectionView? _searchView;   // 可排序/過濾之檢視（#177）
+    private string _sortProp = nameof(SearchRow.RecommendScore);   // 目前排序欄（預設＝推薦分）
+    private System.ComponentModel.ListSortDirection _sortDir = System.ComponentModel.ListSortDirection.Descending;
     private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -422,11 +425,17 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         finally { SearchBtn.IsEnabled = true; }
     }
 
-    /// <summary>把搜尋結果填入表格（#177）：縮圖/名稱/連結即時顯示；內嵌字幕於背景逐列免費探測填入；網路字幕留待逐列按需查。</summary>
+    /// <summary>把搜尋結果填入可排序/過濾表格（#177）：即時顯示縮圖/名稱/連結/片長/推薦星等；內嵌字幕背景逐列免費探測填入；預設依推薦分排序。</summary>
     private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
     {
-        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title)).ToList();
-        SearchResultsTable.ItemsSource = _searchRows;
+        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec)).ToList();
+        _searchView = new System.Windows.Data.ListCollectionView(_searchRows);
+        _sortProp = nameof(SearchRow.RecommendScore);                                    // 每次新搜尋回到預設排序
+        _sortDir = System.ComponentModel.ListSortDirection.Descending;
+        ApplySort();
+        ApplyResultFilter();                                                             // 沿用目前過濾框文字
+        SearchResultsTable.ItemsSource = _searchView;
+        UpdateSortHeaders();
         SearchResultsPanel.Visibility = _searchRows.Count > 0
             ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         if (_searchRows.Count > 0)
@@ -435,7 +444,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }
     }
 
-    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；新搜尋（token 取消）即止。</summary>
+    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；全部完成後重整檢視使推薦排序反映字幕結果。新搜尋（token 取消）即止。</summary>
     private async Task ProbeEmbeddedForRowsAsync(IReadOnlyList<SearchRow> rows, CancellationToken ct)
     {
         using var gate = new SemaphoreSlim(4); // 限流：最多 4 個 yt-dlp 併發，免一次開 8 個行程
@@ -455,6 +464,79 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             catch (Exception) { row.SetEmbeddedUnknown(); }                              // 私人/移除/逾時→標「?」
         }).ToList();
         try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
+        if (!ct.IsCancellationRequested) { try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
+    }
+
+    /// <summary>套用目前排序欄/方向到檢視（#177）；非依片長排序時，同分以短片優先為次序。</summary>
+    private void ApplySort()
+    {
+        if (_searchView is null) { return; }
+        _searchView.SortDescriptions.Clear();
+        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(_sortProp, _sortDir));
+        if (_sortProp != nameof(SearchRow.DurationSec))
+        {
+            _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
+                nameof(SearchRow.DurationSec), System.ComponentModel.ListSortDirection.Ascending)); // 同分：短片優先（更好入門）
+        }
+        _searchView.Refresh();
+    }
+
+    /// <summary>點欄位表頭排序（#177）：同欄再點＝反向；換欄＝該欄預設方向。</summary>
+    private void OnSortHeader(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (_searchView is null || (sender as System.Windows.FrameworkElement)?.Tag is not string prop) { return; }
+        if (_sortProp == prop)
+        {
+            _sortDir = _sortDir == System.ComponentModel.ListSortDirection.Ascending
+                ? System.ComponentModel.ListSortDirection.Descending
+                : System.ComponentModel.ListSortDirection.Ascending;
+        }
+        else
+        {
+            _sortProp = prop;
+            // 標題／片長預設遞增（A–Z、短→長）；推薦/字幕排名預設遞減（好→差）
+            _sortDir = prop is nameof(SearchRow.Title) or nameof(SearchRow.DurationSec)
+                ? System.ComponentModel.ListSortDirection.Ascending
+                : System.ComponentModel.ListSortDirection.Descending;
+        }
+        ApplySort();
+        UpdateSortHeaders();
+    }
+
+    /// <summary>更新表頭箭頭：目前排序欄加 ▲/▼，其餘還原基本標籤。</summary>
+    private void UpdateSortHeaders()
+    {
+        var arrow = _sortDir == System.ComponentModel.ListSortDirection.Ascending ? " ▲" : " ▼";
+        foreach (var (btn, prop, label) in new[]
+        {
+            (HdrRec, nameof(SearchRow.RecommendScore), "★ Rec"),
+            (HdrTitle, nameof(SearchRow.Title), "Title"),
+            (HdrTime, nameof(SearchRow.DurationSec), "Time"),
+            (HdrManual, nameof(SearchRow.ManualRank), "Manual"),
+            (HdrAuto, nameof(SearchRow.AutoRank), "Auto"),
+            (HdrWeb, nameof(SearchRow.WebRank), "Web"),
+        })
+        {
+            btn.Content = label + (prop == _sortProp ? arrow : "");
+        }
+    }
+
+    /// <summary>過濾框變更→依標題（不分大小寫、含子字串）過濾表格列（#177）；空＝不過濾。</summary>
+    private void OnResultFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (FilterPlaceholder is null) { return; } // 防 InitializeComponent 期間佔位符尚未連結時之初始事件
+        FilterPlaceholder.Visibility = string.IsNullOrEmpty(ResultFilterBox.Text)
+            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        ApplyResultFilter();
+    }
+
+    private void ApplyResultFilter()
+    {
+        if (_searchView is null) { return; }
+        var q = ResultFilterBox.Text?.Trim() ?? "";
+        _searchView.Filter = q.Length == 0
+            ? null
+            : o => o is SearchRow r && r.Title.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>表格點名稱→載入該影片到播放器（加入清單、記錄使用中主題）。</summary>
@@ -484,8 +566,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             {
                 var progress = new System.Progress<string>(s => report(s));
                 var result = await _webProbe.ProbeAsync(title, progress, ct);
-                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60)); }
-                else { row.SetWebResult("✗", EmbGray, "No web transcript found"); }
+                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
+                else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
                 return result.Usages
                     .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
                     .ToList();
@@ -1024,14 +1106,19 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public string WatchUrl { get; }
         public Uri WatchUri { get; }
         public System.Windows.Media.ImageSource? ThumbSource { get; }
+        public int? DurationSec { get; }            // 排序鍵（片長，秒；未知＝null 排末）
+        public string DurationText { get; }         // 顯示（m:ss／h:mm:ss／—）
 
-        public SearchRow(string videoId, string title)
+        public SearchRow(string videoId, string title, int? durationSec)
         {
             VideoId = videoId;
             Title = title;
             WatchUrl = "https://www.youtube.com/watch?v=" + videoId;
             WatchUri = new Uri(WatchUrl);
             ThumbSource = MakeThumbSource(videoId);
+            DurationSec = durationSec;
+            DurationText = FormatDuration(durationSec);
+            RecomputeRecommend(null, null); // 初始（字幕未探測）＝暫定推薦分，探測完成後重算
         }
 
         // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；符號 …(查中)／✓(有)／–(無)／?(不明)
@@ -1043,14 +1130,25 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public string AutoText { get => _autoText; private set { _autoText = value; On(); } }
         private System.Windows.Media.Brush _autoBrush = EmbGray;
         public System.Windows.Media.Brush AutoBrush { get => _autoBrush; private set { _autoBrush = value; On(); } }
-        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰）。</summary>
+        // 排序鍵（數值，供 CollectionView 排序）：1 有／0 無／-1 未知或失敗
+        private int _manualRank = -1;
+        public int ManualRank { get => _manualRank; private set { _manualRank = value; On(); } }
+        private int _autoRank = -1;
+        public int AutoRank { get => _autoRank; private set { _autoRank = value; On(); } }
+        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰），更新排序鍵並重算推薦分。</summary>
         public void SetEmbedded(bool hasManual, bool hasAuto)
         {
-            ManualText = hasManual ? "✓" : "–"; ManualBrush = hasManual ? EmbGreen : EmbGray;
-            AutoText = hasAuto ? "✓" : "–"; AutoBrush = hasAuto ? EmbAmber : EmbGray;
+            ManualText = hasManual ? "✓" : "–"; ManualBrush = hasManual ? EmbGreen : EmbGray; ManualRank = hasManual ? 1 : 0;
+            AutoText = hasAuto ? "✓" : "–"; AutoBrush = hasAuto ? EmbAmber : EmbGray; AutoRank = hasAuto ? 1 : 0;
+            RecomputeRecommend(hasManual, hasAuto);
         }
-        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」。</summary>
-        public void SetEmbeddedUnknown() { ManualText = "?"; ManualBrush = EmbGray; AutoText = "?"; AutoBrush = EmbGray; }
+        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」（排序鍵 -1、推薦分視為未知）。</summary>
+        public void SetEmbeddedUnknown()
+        {
+            ManualText = "?"; ManualBrush = EmbGray; ManualRank = -1;
+            AutoText = "?"; AutoBrush = EmbGray; AutoRank = -1;
+            RecomputeRecommend(null, null);
+        }
 
         // 網路字幕（按需查、花額度）：三態
         private string _webButtonText = "\U0001F310 Check";
@@ -1067,18 +1165,58 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public System.Windows.Visibility WebResultVisibility { get => _webResultVisibility; private set { _webResultVisibility = value; On(); } }
         private string _webResultTip = "";
         public string WebResultTip { get => _webResultTip; private set { _webResultTip = value; On(); } }
+        private int _webRank; // 排序鍵：1 有／-1 無／0 未查
+        public int WebRank { get => _webRank; private set { _webRank = value; On(); } }
 
         /// <summary>切到「查中」：按鈕變「…」且停用。</summary>
         public void SetWebChecking() { WebButtonText = "…"; WebButtonEnabled = false; }
-        /// <summary>切到「完成」：隱藏按鈕、顯示結果符號（✓有／✗無），來源置 tooltip。</summary>
-        public void SetWebResult(string text, System.Windows.Media.Brush brush, string tip)
+        /// <summary>切到「完成」：隱藏按鈕、顯示結果符號（✓有／✗無），來源置 tooltip，更新排序鍵。</summary>
+        public void SetWebResult(string text, System.Windows.Media.Brush brush, string tip, bool found)
         {
             WebButtonVisibility = System.Windows.Visibility.Collapsed;
             WebResultText = text; WebResultBrush = brush; WebResultTip = tip;
             WebResultVisibility = System.Windows.Visibility.Visible;
+            WebRank = found ? 1 : -1;
         }
         /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
         public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; }
+
+        // ── 推薦優序（#177，第一欄）：規則＝字幕品質（Manual>Auto>無）＋片長適學度；星等 1–5 ──
+        private double _recommendScore;
+        public double RecommendScore { get => _recommendScore; private set { _recommendScore = value; On(); } } // 排序鍵（預設遞減）
+        private string _recommendStars = "";
+        public string RecommendStars { get => _recommendStars; private set { _recommendStars = value; On(); } }
+        public string RecommendTip =>
+            "Recommended for learning — from subtitle quality (Manual best, then Auto) and length (a single short lesson/episode beats a long compilation). Sort or filter the table by any column.";
+
+        /// <summary>依字幕（<paramref name="hasManual"/>／<paramref name="hasAuto"/>，null＝未探測＝中性）與片長算推薦星等（1–5）。</summary>
+        private void RecomputeRecommend(bool? hasManual, bool? hasAuto)
+        {
+            int subScore = hasManual == true ? 3 : hasAuto == true ? 1 : hasManual is null ? 1 : 0; // 人工3／自動1／未知1／無0
+            int total = Math.Clamp(subScore + DurationScore(DurationSec), 1, 5);
+            RecommendScore = total;
+            RecommendStars = new string('★', total) + new string('☆', 5 - total);
+        }
+
+        /// <summary>片長適學度加分：1–25 分＝2（理想單則）；&lt;1 分或 25–60 分＝1；&gt;60 分（合輯）＝0；未知＝1（中性）。</summary>
+        private static int DurationScore(int? sec)
+        {
+            if (sec is null) return 1;
+            if (sec < 60) return 1;
+            if (sec <= 1500) return 2;
+            if (sec <= 3600) return 1;
+            return 0;
+        }
+
+        /// <summary>片長顯示：&lt;1 小時＝m:ss、≥1 小時＝h:mm:ss；未知／0＝—。</summary>
+        private static string FormatDuration(int? sec)
+        {
+            if (sec is null || sec <= 0) return "—";
+            var t = TimeSpan.FromSeconds(sec.Value);
+            return t.TotalHours >= 1
+                ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+                : $"{t.Minutes}:{t.Seconds:00}";
+        }
     }
 
     /// <summary>切換右側子頁籤（#177）：搜尋下載／播放學習；以可見性切換——兩 pane 皆留於視覺樹，WebView2 不被卸載重建、播放不中斷。</summary>
