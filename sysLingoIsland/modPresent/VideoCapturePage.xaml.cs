@@ -64,6 +64,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
     private bool _inferring;           // AI 說話人推斷中（防重入、按鈕停用）（增量6）
     private bool _transcribing;        // Whisper 轉錄中（防重入、按鈕停用）（#187）
+    private Row2Method _row2Applied = Row2Method.None; // #189：Row2 已套用之方法（🌐Script／🧠AI）——顯「已按下」；換基底/新片重置
+    private bool _row3Applied;         // #189：Row3（🎙Voice 精修時間）是否已套用
+    private const string ScriptLabel = "\U0001F310 Script";  // 🌐
+    private const string AnalyzeLabel = "\U0001F9E0 AI";     // 🧠
+    private const string VoiceLabel = "\U0001F399 Voice";    // 🎙
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
     private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
     private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
@@ -328,6 +333,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             _lastPausedIndex = -1;                 // 時間軸/斷句換→到句暫停判定重起算
             SetCues(result.Cues);
             _subs.Save(id, _isAuto, result.Cues);  // 新基底存檔（#174；覆寫）
+            ResetRefineApplied();                  // #189：換基底→管線自 Row1 重起（Row2/Row3 未套用）
             if (_rows.Count > 0) { ShowCue(0); }
             SetStatus($"Loaded {_cues.Count} {(_isAuto ? "auto" : "manual")} subtitle line(s).");
         }
@@ -1092,6 +1098,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         TranscribeBtn.IsEnabled = false; // #187
         BaseAutoBtn.IsEnabled = false; BaseManualBtn.IsEnabled = false;   // #189：Row1 基底切換鈕
         BaseAutoBtn.IsChecked = false; BaseManualBtn.IsChecked = false;
+        ResetRefineApplied();                                             // #189：新載入→管線重置（Row2/Row3 未套用）
         PauseAtSpeaker.IsEnabled = false;
     }
 
@@ -1164,6 +1171,25 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     /// <summary>說話人來源：依台詞 AI 推斷（增量6）或 OpenAI 網搜上網找逐字稿（增量6b）。</summary>
     private enum SpeakerSource { Dialogue, Web }
 
+    /// <summary>Row2 已套用之修正方法（#189）：無／🌐Script（網路逐字稿）／🧠AI（LLM 推理）。互斥——套一個即取代另一個。</summary>
+    private enum Row2Method { None, Script, Analyze }
+
+    /// <summary>依已套用狀態更新 Row2/Row3 按鈕外觀（#189）：已套用者前置 ✓ 表「保持按下」。</summary>
+    private void UpdateRefineButtons()
+    {
+        WebSpeakersBtn.Content = (_row2Applied == Row2Method.Script ? "✓ " : "") + ScriptLabel;
+        InferSpeakersBtn.Content = (_row2Applied == Row2Method.Analyze ? "✓ " : "") + AnalyzeLabel;
+        TranscribeBtn.Content = (_row3Applied ? "✓ " : "") + VoiceLabel;
+    }
+
+    /// <summary>重置 Row2/Row3 已套用狀態（#189）：換基底來源／載入新片時，管線自 Row1 重起。</summary>
+    private void ResetRefineApplied()
+    {
+        _row2Applied = Row2Method.None;
+        _row3Applied = false;
+        UpdateRefineButtons();
+    }
+
     /// <summary>
     /// 說話人疊加（epic #145 增量6／6b，#156／#145 §D）：以指定 <paramref name="enricher"/> 取每句說話人、非破壞併回
     /// （僅填補未標示、保留既有 ground truth），並存回字幕存檔（#174）。**會用到 API**——改以 <see cref="AiActionWindow"/>
@@ -1201,6 +1227,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 var keepShown = _shownCue;   // index 不變（僅補說話人）→ 保留當前句
                 SetCues(merged);
                 if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, merged); } // 存說話人結果（#174）
+                _row2Applied = web ? Row2Method.Script : Row2Method.Analyze; // #189：標記 Row2 已套用（保持按下）
                 if (keepShown >= 0 && keepShown < _rows.Count) { ShowCue(keepShown); } // 重繪字幕帶（含新說話人前綴）
                 report(filled > 0
                     ? $"Done — labeled {filled} more line(s) with a speaker."
@@ -1221,6 +1248,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         EditYamlBtn.IsEnabled = enable;
         TranscribeBtn.IsEnabled = enable; // #187
         UpdateBaseToggles();              // #189：恢復 Row1 狀態
+        UpdateRefineButtons();            // #189：反映 Row2 已套用（✓）
     }
 
     /// <summary>
@@ -1268,6 +1296,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 SetCues(result.Cues);
                 _isAuto = true;                 // 機器轉錄（非人工字幕）
                 if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, result.Cues); } // 存轉錄結果（#174）
+                _row3Applied = true;            // #189：標記 Row3（Voice 精修時間）已套用
                 if (_rows.Count > 0) { ShowCue(0); }
                 var twd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(result.AudioSeconds));
                 _spendLedger.Record(AiCost.EstimateWhisperUsd(result.AudioSeconds), DateTimeOffset.Now); // #189：實際花費記帳
@@ -1284,6 +1313,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         EditYamlBtn.IsEnabled = enable;
         TranscribeBtn.IsEnabled = enable;
         UpdateBaseToggles(); // #189：恢復 Row1 狀態
+        UpdateRefineButtons();            // #189：反映 Row3 已套用（✓）
     }
 
     /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕末句開始時間為估（字幕大致涵蓋全片）；無字幕回 0。實際時長於轉錄時由 ffprobe 取得。</summary>

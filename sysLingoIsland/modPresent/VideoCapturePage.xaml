@@ -421,22 +421,32 @@
                                 IsEnabled="False" Click="OnBaseManualClick"
                                 ToolTip="Human-made subtitles: correct timing and sentence breaks, no speaker (preferred)"/>
                 </Grid>
-                <!-- 兩顆說話人來源（同疊加架構）：AI 依台詞推斷（增量6）｜🌐 網搜上網找逐字稿（增量6b） -->
+                <!-- ② 講話人／斷句（#189）：不動時間。🌐 Script＝用網路逐字稿；🧠 AI＝用 AI 推理。Manual 基底只補講話人；Auto 基底另補斷句 -->
                 <Grid Grid.Row="1" Margin="0,4,0,0">
                   <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
-                          IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
-                  <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Web" Height="26" Margin="3,0,0,0"
-                          IsEnabled="False" ToolTip="Search the web for this show's transcript to label speakers (OpenAI web search; uses your OpenAI key)"/>
+                  <TextBlock Grid.Column="0" Text="Speakers" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Script" Height="26" Margin="0,0,3,0"
+                          IsEnabled="False" ToolTip="Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
+                  <Button x:Name="InferSpeakersBtn" Grid.Column="2" Content="&#x1F9E0; AI" Height="26" Margin="3,0,0,0"
+                          IsEnabled="False" ToolTip="Use AI reasoning to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
                 </Grid>
-                <Button x:Name="EditYamlBtn" Grid.Row="2" Content="Edit YAML" Height="26" Margin="0,4,0,0"
-                        IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
-                <!-- Whisper ASR（#187）：抓真實聲音重新轉錄，修正自動字幕時間漂移；會用金鑰＋下載音訊，跑前確認估算費用 -->
-                <Button x:Name="TranscribeBtn" Grid.Row="3" Content="&#x1F399; Re-transcribe audio" Height="26" Margin="0,4,0,0"
-                        IsEnabled="False" ToolTip="Transcribe the actual audio with OpenAI Whisper to realign subtitle timing (uses your OpenAI key + downloads audio; shows estimated cost before running)"/>
+                <!-- ③ 精修時間（#189）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
+                <Grid Grid.Row="2" Margin="0,4,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" Text="Timing" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <Button x:Name="TranscribeBtn" Grid.Column="2" Content="&#x1F399; Voice" Height="26" Margin="3,0,0,0"
+                          IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
+                </Grid>
+                <Button x:Name="EditYamlBtn" Grid.Row="3" Content="Edit YAML" Height="26" Margin="0,6,0,0"
+                        IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
               </Grid>
 
               <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
