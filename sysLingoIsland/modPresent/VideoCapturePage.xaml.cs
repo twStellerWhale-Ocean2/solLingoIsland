@@ -517,6 +517,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     {
         var topic = TranscriptBox.Text?.Trim() ?? "";
         if (topic.Length == 0) { SetStatus("Enter a topic to find videos that have a transcript."); return; }
+        if (!ConfirmAiRun("Find videos with a transcript",
+            $"上網找「{topic}」有逐字稿可用的影片（OpenAI gpt-4.1 網搜）。", EstimateWebSearchCallUsd())) { return; } // #189：跑前確認估價＋本日/小時
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource();                 // 背景探測/自動網搜用（新搜尋取消）
         var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 縮小網搜範圍
@@ -756,9 +758,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         RunWebProbe(row);
     }
 
-    /// <summary>查該片是否有網路逐字稿（花 OpenAI 額度、模態顯進度與費用）；結果回填該列並**存入快取**（#188：重搜同片免重花）。取消/失敗還原按鈕供再試。手動 Check 與右鍵重檢共用。</summary>
+    /// <summary>查該片是否有網路逐字稿（花 OpenAI 額度、跑前確認估價、模態顯進度與費用）；結果回填該列並**存入快取**（#188：重搜同片免重花）。取消/失敗還原按鈕供再試。手動 Check 與右鍵重檢共用。</summary>
     private void RunWebProbe(SearchRow row)
     {
+        if (!ConfirmAiRun("Check web subtitles",
+            $"查「{Truncate(row.Title, 40)}」是否有網路逐字稿（OpenAI gpt-4.1 網搜）。", EstimateWebSearchCallUsd())) { return; } // #189：跑前確認估價＋本日/小時
         row.SetWebChecking();
         var title = row.Title;
         var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 尚未載入指派主題→用使用中主題縮小網搜範圍
@@ -1588,6 +1592,10 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
         return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, title,
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
     }
+
+    /// <summary>粗估單次 gpt-4.1 <c>web_search</c> 呼叫費用（#189 獲得頁 Find／Web check 跑前確認用）：代表性 input/output tokens ＋ 一次網搜工具費（實測 input 約 24k–32k）；僅概估，實際依回傳用量記帳。</summary>
+    private static double EstimateWebSearchCallUsd()
+        => AiCost.EstimateUsd("gpt-4.1", 24000, 300, true) ?? 0;
 
     /// <summary>粗估說話人推斷/網搜費用（#189）：以字幕字數估 tokens × 代表性模型單價（web 另加網搜工具費）；僅供跑前概估，實際依回傳用量記帳。</summary>
     private double EstimateSpeakerInferenceUsd(bool web)
