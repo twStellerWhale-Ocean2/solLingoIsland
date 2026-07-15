@@ -195,6 +195,7 @@ public static class SpeakerInference
     {
         var s = raw?.Trim();
         if (string.IsNullOrEmpty(s)) { return null; }
+        if (string.Equals(s, "unknown", StringComparison.OrdinalIgnoreCase)) { return null; } // 明確「unknown」＝無已知說話人（#189：等同 null，顯示端統一補 unknown）
         if (s.Length > 24) { return null; }              // 思考外漏／多名混寫
         if (s[0] is '[' or '(') { return null; }          // 音效／旁白，如 [music]、(applause)
         if (s.Contains('?')) { return null; }             // 不確定標記

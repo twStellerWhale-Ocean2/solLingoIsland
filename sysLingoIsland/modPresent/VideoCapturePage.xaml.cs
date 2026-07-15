@@ -28,6 +28,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
+    private readonly ISubtitleRefiner _refiner;                     // #189 Row2「🧠 AI 分析」：LLM 重分句＋標說話人、時間不變（Auto 基底用）；會用 API、按鈕觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
@@ -86,7 +87,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
                             ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IWebTranscriptProbe webProbe,
-                            IVideoSearcher searcher, SubtitleStore subtitles, IAudioTranscriber transcriber)
+                            IVideoSearcher searcher, SubtitleStore subtitles, IAudioTranscriber transcriber,
+                            ISubtitleRefiner refiner)
     {
         InitializeComponent();
         _fetcher = fetcher;
@@ -97,6 +99,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _webProbe = webProbe;
         _searcher = searcher;
         _transcriber = transcriber;
+        _refiner = refiner;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
@@ -121,8 +124,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         CueList.MouseDoubleClick += (_, _) => { _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); };
         // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
-        InferSpeakersBtn.Click += (_, _) => InferSpeakers(_enricher, SpeakerSource.Dialogue);
-        WebSpeakersBtn.Click += (_, _) => InferSpeakers(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找
+        // #189 Row2「🧠 AI」：Auto 基底→LLM 重分句＋標說話人（修斷句、不動時間）；Manual 基底→僅補說話人（斷句已好）
+        InferSpeakersBtn.Click += (_, _) => { if (_isAuto) { RefineWithAi(); } else { InferSpeakers(_enricher, SpeakerSource.Dialogue); } };
+        WebSpeakersBtn.Click += (_, _) => InferSpeakers(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找（🌐 Script）
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         TranscribeBtn.Click += (_, _) => Transcribe(); // #187：Whisper 抓聲音重轉字幕（跑前確認估算費用）
         PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
@@ -1249,6 +1253,61 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         TranscribeBtn.IsEnabled = enable; // #187
         UpdateBaseToggles();              // #189：恢復 Row1 狀態
         UpdateRefineButtons();            // #189：反映 Row2 已套用（✓）
+    }
+
+    private static IReadOnlyList<AiActionWindow.AiUsage> ToUsages(IReadOnlyList<SpeakerUsage> us) =>
+        us.Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch)).ToList();
+
+    /// <summary>
+    /// Row2「🧠 AI」對 **Auto 基底**（#189）：LLM 把破碎自動字幕**重新併成完整句、修斷句並標說話人，時間沿用原格不變**
+    /// （<see cref="SubtitleRefine.BuildCues"/>）。跑前確認費用＋記帳；成功取代字幕、存檔、標 Row2 已套用。Manual 基底走 <see cref="InferSpeakers"/>（僅補說話人）。
+    /// </summary>
+    private void RefineWithAi()
+    {
+        if (_cues.Count == 0 || _yamlEditing || _inferring || _transcribing || _switchingBase || _loading) { return; }
+        if (!ConfirmAiRun("AI analyze — re-segment",
+            "由 AI 把破碎的自動字幕重新併成完整句、修正斷句並標說話人（時間不變；依內容長度計費）。",
+            EstimateSpeakerInferenceUsd(false)))
+        { return; }
+        _inferring = true;
+        InferSpeakersBtn.IsEnabled = false;
+        WebSpeakersBtn.IsEnabled = false;
+        EditYamlBtn.IsEnabled = false;
+        TranscribeBtn.IsEnabled = false;
+        BaseAutoBtn.IsEnabled = false; BaseManualBtn.IsEnabled = false;
+        var target = _cues;                 // stale guard 基準
+        var titleForAi = _currentTitle;
+        var themeForAi = CurrentThemeName();
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "AI analyze — re-segment",
+            async (report, ct) =>
+            {
+                var progress = new System.Progress<string>(s => report(s));
+                var result = await _refiner.RefineAsync(target, titleForAi, progress, ct, themeForAi);
+                if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
+                var newCues = SubtitleRefine.BuildCues(target, result.Segments);
+                _spendLedger.Record(result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189：實際花費記帳
+                if (newCues.Count == 0)
+                {
+                    report("AI returned no usable segments — kept the current subtitle.");
+                    return result.Usages.Count == 0 ? null : ToUsages(result.Usages);
+                }
+                _lastPausedIndex = -1;          // 斷句換→到句暫停判定重起算（時間本身不變）
+                SetCues(newCues);
+                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, newCues); } // 存重分句結果（#174）
+                _row2Applied = Row2Method.Analyze; // #189：標記 Row2 已套用（保持按下）
+                if (_rows.Count > 0) { ShowCue(0); }
+                report($"Done — re-segmented into {newCues.Count} line(s); timing kept.");
+                SetStatus($"AI re-segmented into {newCues.Count} line(s) — sentence breaks fixed, timing unchanged.");
+                return result.Usages.Count == 0 ? null : ToUsages(result.Usages);
+            });
+        _inferring = false;
+        var enable = _cues.Count > 0 && !_yamlEditing && !_loading;
+        InferSpeakersBtn.IsEnabled = enable;
+        WebSpeakersBtn.IsEnabled = enable;
+        EditYamlBtn.IsEnabled = enable;
+        TranscribeBtn.IsEnabled = enable;
+        UpdateBaseToggles();
+        UpdateRefineButtons();
     }
 
     /// <summary>
