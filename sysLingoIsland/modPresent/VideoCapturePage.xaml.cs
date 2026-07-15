@@ -33,6 +33,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
     private readonly SearchHistoryStore _searchHistory = new();     // 搜尋關鍵字歷史（#186）：搜尋框下拉、可刪
     private readonly SearchResultRecordStore _searchRecords = new();// 搜尋成果初次時間紀錄（#186）：First-seen 欄
+    private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188）：還原已探測之 Manual/Auto/Web，重搜同片免重探/免重花額度
     private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -472,6 +473,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var firstSeen = _searchRecords.RecordAndGet(results.Select(r => r.VideoId).ToList(), DateTimeOffset.Now); // #186：記/取初次搜尋時間
         _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec,
             firstSeen.TryGetValue(r.VideoId, out var fs) ? fs : DateTimeOffset.Now)).ToList();
+        RestoreCachedStatus(_searchRows);                                                // #188：還原已探測之字幕狀態（免重探內嵌、免重花額度查網路）
         RefreshLoadedFlags();                                                            // 依現有影片清單標示「已加入」（灰）
         _searchView = new System.Windows.Data.ListCollectionView(_searchRows);
         ApplyDefaultSort();                                                              // 預設：推薦分遞減、同分短片優先
@@ -489,11 +491,25 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }
     }
 
-    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；全部完成後重整檢視使推薦排序反映字幕結果。新搜尋（token 取消）即止。</summary>
+    /// <summary>依快取還原各列已探測之字幕狀態（#188）：內嵌（人工/自動）與網路（found/none＋來源）即時填入、免重探；未快取者維持 spinner 待背景探測。</summary>
+    private void RestoreCachedStatus(IReadOnlyList<SearchRow> rows)
+    {
+        var map = _statusStore.Load();
+        foreach (var row in rows)
+        {
+            if (!map.TryGetValue(row.VideoId, out var e)) { continue; }
+            if (e.Manual.HasValue && e.Auto.HasValue) { row.SetEmbedded(e.Manual.Value, e.Auto.Value); } // 停 spinner、即時徽章
+            if (e.Web == VideoSubtitleStatusStore.WebFound) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(e.WebSource ?? "", 60), found: true); }
+            else if (e.Web == VideoSubtitleStatusStore.WebNone) { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
+        }
+    }
+
+    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；全部完成後重整檢視使推薦排序反映字幕結果。新搜尋（token 取消）即止。#188：只探測未從快取還原者，結果批次存檔（避免併發逐列寫檔互相覆蓋）。</summary>
     private async Task ProbeEmbeddedForRowsAsync(IReadOnlyList<SearchRow> rows, CancellationToken ct)
     {
+        var pending = rows.Where(r => r.NeedsEmbeddedProbe).ToList();                    // #188：略過已快取還原者（免重探）
         using var gate = new SemaphoreSlim(4); // 限流：最多 4 個 yt-dlp 併發，免一次開 8 個行程
-        var tasks = rows.Select(async row =>
+        var tasks = pending.Select(async row =>
         {
             try
             {
@@ -506,10 +522,16 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 finally { gate.Release(); }
             }
             catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
-            catch (Exception) { row.SetEmbeddedUnknown(); }                              // 私人/移除/逾時→標「?」
+            catch (Exception) { row.SetEmbeddedUnknown(); }                              // 私人/移除/逾時→標「?」（不存檔、下次重探）
         }).ToList();
         try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
-        if (!ct.IsCancellationRequested) { try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
+        if (!ct.IsCancellationRequested)
+        {
+            // 批次存內嵌結果（#188）：僅存探測成功者（ManualRank≠-1）；一次讀寫避免併發互相覆蓋。存檔後重搜同片免重探。
+            _statusStore.SaveEmbeddedBatch(pending.Where(r => r.ManualRank != -1)
+                .Select(r => (r.VideoId, r.ManualRank == 1, r.AutoRank == 1)));
+            try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
+        }
         // 預設開啟自動網搜（#184，USR 選「只查前幾筆」）：探測落定、推薦排名反映字幕後，對推薦分前 N 列自動網搜（花額度、背景、無模態）
         if (!ct.IsCancellationRequested && AutoWebCheck.IsChecked == true)
         {
@@ -550,6 +572,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 var result = await _webProbe.ProbeAsync(row.Title, null, ct, themeForAi);
                 if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
                 else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
+                _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
                 foreach (var u in result.Usages) { usd += AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0; }
                 done++;
                 SetStatus($"Auto web-check {done}/{targets.Count} — 約 NT${AiCost.ToTwd(usd):0.##} so far…");
@@ -618,6 +641,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private void OnSearchRowWebProbe(object sender, System.Windows.RoutedEventArgs e)
     {
         if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
+        RunWebProbe(row);
+    }
+
+    /// <summary>查該片是否有網路逐字稿（花 OpenAI 額度、模態顯進度與費用）；結果回填該列並**存入快取**（#188：重搜同片免重花）。取消/失敗還原按鈕供再試。手動 Check 與右鍵重檢共用。</summary>
+    private void RunWebProbe(SearchRow row)
+    {
         row.SetWebChecking();
         var title = row.Title;
         var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 尚未載入指派主題→用使用中主題縮小網搜範圍
@@ -628,11 +657,52 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 var result = await _webProbe.ProbeAsync(title, progress, ct, themeForAi);
                 if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
                 else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
+                _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
                 return result.Usages
                     .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
                     .ToList();
             });
         if (row.WebResultVisibility != System.Windows.Visibility.Visible) { row.ResetWebButton(); } // 取消/失敗→還原按鈕供再試
+    }
+
+    /// <summary>右鍵表格列→選取該列（#188）：使右鍵選單「重新檢查」作用於游標下那一列（DataGrid 預設右鍵不選取）。</summary>
+    private void OnResultRowRightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var dep = e.OriginalSource as System.Windows.DependencyObject;
+        while (dep is not null and not System.Windows.Controls.DataGridRow)
+        {
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+        }
+        if (dep is System.Windows.Controls.DataGridRow gridRow) { SearchResultsGrid.SelectedItem = gridRow.Item; }
+    }
+
+    /// <summary>右鍵選單「重新檢查內嵌字幕（免費）」（#188）：清該列徽章、重顯 spinner、重探 yt-dlp、更新快取。</summary>
+    private void OnRecheckEmbedded(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (SearchResultsGrid.SelectedItem is not SearchRow row) { return; }
+        row.SetEmbeddedChecking();
+        _ = RecheckEmbeddedOneAsync(row, _searchCts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>單列重探內嵌字幕並更新快取（#188 手動重檢）；失敗標「?」不存檔（下次可再試）。</summary>
+    private async Task RecheckEmbeddedOneAsync(SearchRow row, CancellationToken ct)
+    {
+        try
+        {
+            var info = await _fetcher.ProbeEmbeddedAsync(row.VideoId, ct);
+            row.SetEmbedded(info.HasManual, info.HasAuto);
+            _statusStore.SaveEmbedded(row.VideoId, info.HasManual, info.HasAuto);
+        }
+        catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
+        catch (Exception) { row.SetEmbeddedUnknown(); }
+        try { _searchView?.Refresh(); } catch { /* 盡力 */ }
+    }
+
+    /// <summary>右鍵選單「重新檢查網路字幕（花 OpenAI）」（#188）：走與手動 Check 相同流程（模態顯費用）並更新快取。</summary>
+    private void OnRecheckWeb(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (SearchResultsGrid.SelectedItem is not SearchRow row) { return; }
+        RunWebProbe(row);
     }
 
     /// <summary>以使用中主題之搜尋關鍵字預填搜尋框（#171）；使用者已輸入則不覆寫。</summary>
@@ -1297,6 +1367,16 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             ManualText = "?"; ManualBrush = EmbGray; ManualRank = -1;
             AutoText = "?"; AutoBrush = EmbGray; AutoRank = -1;
             EmbeddedSpinnerVisibility = System.Windows.Visibility.Collapsed;
+            RecomputeRecommend(null, null);
+        }
+        /// <summary>是否仍需內嵌探測（#188）：spinner 仍轉＝未從快取還原、未探測過 → 由背景探測填入。</summary>
+        public bool NeedsEmbeddedProbe => EmbeddedSpinnerVisibility == System.Windows.Visibility.Visible;
+        /// <summary>切回「探測中」（#188 手動重檢）：清徽章、重顯 spinner、排序鍵歸未知，待重新探測填入。</summary>
+        public void SetEmbeddedChecking()
+        {
+            ManualText = ""; ManualBrush = EmbGray; ManualRank = -1;
+            AutoText = ""; AutoBrush = EmbGray; AutoRank = -1;
+            EmbeddedSpinnerVisibility = System.Windows.Visibility.Visible;
             RecomputeRecommend(null, null);
         }
 

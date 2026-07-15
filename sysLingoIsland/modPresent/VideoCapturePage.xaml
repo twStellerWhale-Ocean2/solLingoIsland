@@ -133,7 +133,15 @@
                         HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
                         BorderThickness="0" MaxHeight="500" RowHeight="44" FontSize="12"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                        PreviewMouseRightButtonDown="OnResultRowRightClick"
                         ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
+                <!-- 右鍵重新檢查（#188）：字幕狀態已快取、平常重搜直接還原不重探；需更新時於此手動重檢（內嵌免費、網路花額度） -->
+                <DataGrid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="↻ Re-check embedded subtitles (free)" Click="OnRecheckEmbedded"/>
+                    <MenuItem Header="🌐 Re-check web subtitle (uses OpenAI)" Click="OnRecheckWeb"/>
+                  </ContextMenu>
+                </DataGrid.ContextMenu>
                 <DataGrid.Columns>
                   <!-- 推薦優序（#183）：彩色圓標數字 1–5（5＝最佳、綠；3＝琥珀；低＝灰）——比星等好懂；點表頭以推薦分排序（預設排序欄） -->
                   <DataGridTemplateColumn Header="Pick" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="48">
