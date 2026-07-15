@@ -12,6 +12,8 @@ public partial class AiActionWindow : Window
 {
     private readonly System.Threading.CancellationTokenSource _cts = new();
     private bool _done;
+    private bool _autoClose;      // 成功後自動關（進度提示視窗用、免 OK；失敗/取消仍留 OK）
+    private bool _showCost = true; // false＝不顯費用（免費動作如搜尋進度）
     private Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>>? _action;
 
     /// <summary>一次 AI 呼叫之用量（供費用顯示）：輸入/輸出 tokens＋模型＋是否含 web_search 工具費。</summary>
@@ -32,8 +34,19 @@ public partial class AiActionWindow : Window
     /// <summary>建立、設定動作並模態顯示；動作於視窗內執行、完成後由使用者按 OK 關閉。</summary>
     public static void RunAndShow(Window? owner, string title,
         Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>> action)
+        => RunAndShow(owner, title, action, autoCloseOnSuccess: false, showCost: true);
+
+    /// <summary>
+    /// 進度/動作對話視窗（#185）：<paramref name="autoCloseOnSuccess"/>＝true 時動作成功後自動關（免 OK，供搜尋等進度提示、減少等待焦慮）；
+    /// 失敗或取消仍留 OK 供閱讀。<paramref name="showCost"/>＝false 時不顯費用（免費動作如搜尋）。
+    /// </summary>
+    public static void RunAndShow(Window? owner, string title,
+        Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>> action,
+        bool autoCloseOnSuccess, bool showCost)
     {
         var dlg = new AiActionWindow(title) { Owner = owner };
+        dlg._autoClose = autoCloseOnSuccess;
+        dlg._showCost = showCost;
         dlg.Start(action);
         dlg.ShowDialog();
     }
@@ -47,13 +60,19 @@ public partial class AiActionWindow : Window
     private async Task RunAsync()
     {
         if (_action is null) { Finish(); return; }
+        var ok = false;
         try
         {
-            ShowCost(await _action(Append, _cts.Token));
+            var usages = await _action(Append, _cts.Token);
+            if (_showCost) { ShowCost(usages); } else { CostText.Visibility = System.Windows.Visibility.Collapsed; }
+            ok = true;
         }
         catch (OperationCanceledException) { Append("Canceled."); }
         catch (Exception ex) { Append("Failed: " + ex.Message); } // SpeakerEnrichException 訊息即人類可讀
-        finally { Finish(); }
+        finally
+        {
+            if (ok && _autoClose) { Close(); } else { Finish(); } // 進度視窗成功即自動關；否則留 OK
+        }
     }
 
     private void ShowCost(IReadOnlyList<AiUsage>? usages)

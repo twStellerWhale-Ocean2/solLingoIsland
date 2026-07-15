@@ -91,8 +91,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadFromInputAsync(); }; // 載入中兼作取消
         UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
         // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果以表格呈現，點名稱載入、點連結開原頁、按需查網路字幕（#177）
-        SearchBtn.Click += (_, _) => _ = DoSearchAsync();
-        SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { _ = DoSearchAsync(); } };
+        SearchBtn.Click += (_, _) => DoSearch();
+        SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { DoSearch(); } };
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
@@ -399,34 +399,37 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     // ---- 依關鍵字搜尋 YouTube（#171）：結果下拉選單、點選直接載入 ----
 
-    /// <summary>以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），套搜尋選項（上傳日期 sp 篩／長度 client 篩／最多筆數），結果填入表格；新搜尋取代進行中者。</summary>
-    private async Task DoSearchAsync()
+    /// <summary>
+    /// 以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），套搜尋選項（上傳日期 sp 篩／長度 client 篩／最多筆數）；
+    /// 於**進度提示視窗**內執行 yt-dlp 搜尋（顯進度、完成自動關、減少等待焦慮，#185），完成後填表；
+    /// 表格之背景免費字幕探測與（若開）自動網搜於視窗關閉後續跑、以狀態列回報。新搜尋取代進行中者。
+    /// </summary>
+    private void DoSearch()
     {
         var q = SearchBox.Text?.Trim() ?? "";
         if (q.Length == 0) { SetStatus("Type keywords to search YouTube (or paste a link and Load)."); return; }
         _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();
-        var ct = _searchCts.Token;
-        SearchBtn.IsEnabled = false;
-        SetStatus($"Searching YouTube for “{q}”…");
-        try
-        {
-            var dateToken = (DateFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
-            var lengthKey = (LengthFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "";
-            var max = MaxResultsValue();
-            var fetch = string.IsNullOrEmpty(lengthKey) ? max : Math.Min(max * 3, 50); // 有長度篩→多抓再 client 篩、湊近 max
-            var results = await _searcher.SearchAsync(q, fetch, ct, string.IsNullOrEmpty(dateToken) ? null : dateToken);
-            if (ct.IsCancellationRequested) return;
-            results = VideoSearchFilter.ByLength(results, lengthKey, max);
-            PopulateResults(results);
-            SetStatus(results.Count > 0
-                ? $"{results.Count} result(s) — click a row's Load button, or paste a link and Load."
-                : "No results. Try different keywords or relax the filters.");
-        }
-        catch (SubtitleException ex) { SetStatus(ex.Message); }
-        catch (OperationCanceledException) { /* 被新搜尋取代／取消 → 靜默 */ }
-        catch (Exception ex) { SetStatus("Search failed: " + ex.Message); }
-        finally { SearchBtn.IsEnabled = true; }
+        _searchCts = new CancellationTokenSource(); // 背景探測/自動網搜用（新搜尋取消）
+        var dateToken = (DateFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
+        var lengthKey = (LengthFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "";
+        var max = MaxResultsValue();
+        var fetch = string.IsNullOrEmpty(lengthKey) ? max : Math.Min(max * 3, 50); // 有長度篩→多抓再 client 篩、湊近 max
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Searching YouTube",
+            async (report, ct) =>
+            {
+                report($"Searching YouTube for “{q}”…");
+                if (!string.IsNullOrEmpty(dateToken)) { report("• upload-date filter on"); }
+                if (!string.IsNullOrEmpty(lengthKey)) { report($"• length filter: {lengthKey}"); }
+                var results = await _searcher.SearchAsync(q, fetch, ct, string.IsNullOrEmpty(dateToken) ? null : dateToken);
+                var filtered = VideoSearchFilter.ByLength(results, lengthKey, max);
+                report(filtered.Count > 0 ? $"Found {filtered.Count} result(s) — loading table…" : "No results found.");
+                PopulateResults(filtered); // 填表＋觸發背景免費字幕探測與（若開）自動網搜
+                SetStatus(filtered.Count > 0
+                    ? $"{filtered.Count} result(s) — click a row's Load button, or paste a link and Load."
+                    : "No results. Try different keywords or relax the filters.");
+                return null; // 搜尋本身免費、不顯費用
+            },
+            autoCloseOnSuccess: true, showCost: false);
     }
 
     /// <summary>最多筆數選項值（10/25/50；預設 25、界 1–50）。</summary>
