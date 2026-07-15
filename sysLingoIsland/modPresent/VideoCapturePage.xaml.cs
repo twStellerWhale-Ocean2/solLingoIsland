@@ -848,6 +848,7 @@ window.li_pause=function(){if(ready&&player)player.pauseVideo();};
 window.li_play=function(){if(ready&&player)player.playVideo();};
 window.li_toggle=function(){if(ready&&player){var s=(player.getPlayerState?player.getPlayerState():-1);if(s==1){player.pauseVideo();}else{player.playVideo();}}};
 window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVideo();}};
+window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.pauseVideo();}};
 </script></body></html>
 """;
 
@@ -1117,20 +1118,28 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         await SeekAsync(_cues[next].StartSec);
     }
 
-    /// <summary>雙擊字幕句→跳到該句起點並播放（#169：改雙擊觸發，單擊僅選取）。</summary>
+    /// <summary>雙擊字幕句→**跳到該句起點並暫停**（#189：只定位不自動播放；之後按 ▶ Continue 才自該句起播、到句末暫停）。</summary>
     private async Task JumpToSelectedAsync()
     {
         if (CueList.SelectedItem is not CueRow row || !_webReady) return;
         var i = row.Index;
-        _lastPausedIndex = i - 1; // 允許雙擊當前句＝自其起點重播
+        _lastPausedIndex = i - 1; // 之後 Continue＝自此句起點播、到句末暫停（不影響本次「只定位不播」）
         ShowCue(i);
-        await SeekAsync(_cues[i].StartSec);
+        await SeekPauseAsync(_cues[i].StartSec);
     }
 
+    /// <summary>跳到指定秒並播放（Replay／Next 用）。</summary>
     private async Task SeekAsync(double sec)
     {
         try { await Web.ExecuteScriptAsync($"window.li_seek&&window.li_seek({sec.ToString(CultureInfo.InvariantCulture)})"); }
         catch { /* 盡力跳播 */ }
+    }
+
+    /// <summary>跳到指定秒並**暫停**（#189：字幕點跳只定位、不自動播放）。</summary>
+    private async Task SeekPauseAsync(double sec)
+    {
+        try { await Web.ExecuteScriptAsync($"window.li_seek_pause&&window.li_seek_pause({sec.ToString(CultureInfo.InvariantCulture)})"); }
+        catch { /* 盡力定位 */ }
     }
 
     // ---- 說話人字幕：CueRow 綁定、依說話人篩選、整檔 YAML 編修（epic #145 增量5，#154） ----
