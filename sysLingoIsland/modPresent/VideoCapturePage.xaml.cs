@@ -29,9 +29,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
-    private System.Windows.Data.ListCollectionView? _searchView;   // 可排序/過濾之檢視（#177）
-    private string _sortProp = nameof(SearchRow.RecommendScore);   // 目前排序欄（預設＝推薦分）
-    private System.ComponentModel.ListSortDirection _sortDir = System.ComponentModel.ListSortDirection.Descending;
+    private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
     private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -310,6 +308,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             : "No videos for this theme."; // 有影片但本 theme 無
         VideoEmptyHint.Visibility = shown.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
         UpdateVideoThemePicker(); // 與清單/標題/篩選同步：顯示目前影片之所屬主題（#173）
+        RefreshLoadedFlags();     // #177：清單增/刪/載入後，同步搜尋結果各列 Load 鈕之「已加入」灰態
     }
 
     /// <summary>以目前主題重填「依 theme 篩選」下拉（圖文）；期間抑制重整、保留選取。</summary>
@@ -429,13 +428,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
     {
         _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec)).ToList();
+        RefreshLoadedFlags();                                                            // 依現有影片清單標示「已加入」（灰）
         _searchView = new System.Windows.Data.ListCollectionView(_searchRows);
-        _sortProp = nameof(SearchRow.RecommendScore);                                    // 每次新搜尋回到預設排序
-        _sortDir = System.ComponentModel.ListSortDirection.Descending;
-        ApplySort();
+        ApplyDefaultSort();                                                              // 預設：推薦分遞減、同分短片優先
         ApplyResultFilter();                                                             // 沿用目前過濾框文字
-        SearchResultsTable.ItemsSource = _searchView;
-        UpdateSortHeaders();
+        SearchResultsGrid.ItemsSource = _searchView;
+        if (SearchResultsGrid.Columns.Count > 0)
+        {
+            SearchResultsGrid.Columns[0].SortDirection = System.ComponentModel.ListSortDirection.Descending; // Rec 欄顯示排序箭頭
+        }
         SearchResultsPanel.Visibility = _searchRows.Count > 0
             ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         if (_searchRows.Count > 0)
@@ -467,57 +468,33 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         if (!ct.IsCancellationRequested) { try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
     }
 
-    /// <summary>套用目前排序欄/方向到檢視（#177）；非依片長排序時，同分以短片優先為次序。</summary>
-    private void ApplySort()
+    /// <summary>預設排序（#177）：推薦分遞減、同分短片優先。使用者點 DataGrid 表頭排序時由 DataGrid 接手覆寫。</summary>
+    private void ApplyDefaultSort()
     {
         if (_searchView is null) { return; }
         _searchView.SortDescriptions.Clear();
-        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(_sortProp, _sortDir));
-        if (_sortProp != nameof(SearchRow.DurationSec))
-        {
-            _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
-                nameof(SearchRow.DurationSec), System.ComponentModel.ListSortDirection.Ascending)); // 同分：短片優先（更好入門）
-        }
+        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
+            nameof(SearchRow.RecommendScore), System.ComponentModel.ListSortDirection.Descending));
+        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
+            nameof(SearchRow.DurationSec), System.ComponentModel.ListSortDirection.Ascending)); // 同分：短片優先（更好入門）
         _searchView.Refresh();
     }
 
-    /// <summary>點欄位表頭排序（#177）：同欄再點＝反向；換欄＝該欄預設方向。</summary>
-    private void OnSortHeader(object sender, System.Windows.RoutedEventArgs e)
+    /// <summary>依現有影片清單標示各搜尋列之「已加入」狀態（#177）：清單內者停用 Load 鈕（灰、標 Added）。清單增刪時亦呼叫（見 RefreshVideoList）。</summary>
+    private void RefreshLoadedFlags()
     {
-        if (_searchView is null || (sender as System.Windows.FrameworkElement)?.Tag is not string prop) { return; }
-        if (_sortProp == prop)
-        {
-            _sortDir = _sortDir == System.ComponentModel.ListSortDirection.Ascending
-                ? System.ComponentModel.ListSortDirection.Descending
-                : System.ComponentModel.ListSortDirection.Ascending;
-        }
-        else
-        {
-            _sortProp = prop;
-            // 標題／片長預設遞增（A–Z、短→長）；推薦/字幕排名預設遞減（好→差）
-            _sortDir = prop is nameof(SearchRow.Title) or nameof(SearchRow.DurationSec)
-                ? System.ComponentModel.ListSortDirection.Ascending
-                : System.ComponentModel.ListSortDirection.Descending;
-        }
-        ApplySort();
-        UpdateSortHeaders();
+        if (_searchRows.Count == 0) { return; }
+        var added = new HashSet<string>(_videoStore.Load().Items.Select(i => i.VideoId), StringComparer.Ordinal);
+        foreach (var row in _searchRows) { row.SetLoaded(added.Contains(row.VideoId)); }
     }
 
-    /// <summary>更新表頭箭頭：目前排序欄加 ▲/▼，其餘還原基本標籤。</summary>
-    private void UpdateSortHeaders()
+    /// <summary>雙擊表格列＝載入該列影片（若尚未加入）。</summary>
+    private void OnGridDoubleClickLoad(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        var arrow = _sortDir == System.ComponentModel.ListSortDirection.Ascending ? " ▲" : " ▼";
-        foreach (var (btn, prop, label) in new[]
+        if (SearchResultsGrid.SelectedItem is SearchRow row && row.CanLoad)
         {
-            (HdrRec, nameof(SearchRow.RecommendScore), "★ Rec"),
-            (HdrTitle, nameof(SearchRow.Title), "Title"),
-            (HdrTime, nameof(SearchRow.DurationSec), "Time"),
-            (HdrManual, nameof(SearchRow.ManualRank), "Manual"),
-            (HdrAuto, nameof(SearchRow.AutoRank), "Auto"),
-            (HdrWeb, nameof(SearchRow.WebRank), "Web"),
-        })
-        {
-            btn.Content = label + (prop == _sortProp ? arrow : "");
+            UrlBox.Text = row.VideoId;
+            _ = LoadVideoAsync(row.VideoId, addToStore: true);
         }
     }
 
@@ -539,7 +516,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             : o => o is SearchRow r && r.Title.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>表格點名稱→載入該影片到播放器（加入清單、記錄使用中主題）。</summary>
+    /// <summary>表格列 Load 鈕→載入該影片到播放器（加入清單、記錄使用中主題）；載入後 RefreshVideoList→RefreshLoadedFlags 使該列轉「已加入」灰。</summary>
     private void OnSearchRowLoad(object sender, System.Windows.RoutedEventArgs e)
     {
         if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
@@ -1119,6 +1096,18 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             DurationSec = durationSec;
             DurationText = FormatDuration(durationSec);
             RecomputeRecommend(null, null); // 初始（字幕未探測）＝暫定推薦分，探測完成後重算
+        }
+
+        // 載入鈕狀態（#177）：已在影片清單者停用並標「Added」（灰），否則「Load」可按
+        private bool _isLoaded;
+        public bool CanLoad => !_isLoaded;
+        public string LoadText => _isLoaded ? "Added" : "Load";
+        public void SetLoaded(bool loaded)
+        {
+            if (_isLoaded == loaded) { return; }
+            _isLoaded = loaded;
+            On(nameof(CanLoad));
+            On(nameof(LoadText));
         }
 
         // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；符號 …(查中)／✓(有)／–(無)／?(不明)

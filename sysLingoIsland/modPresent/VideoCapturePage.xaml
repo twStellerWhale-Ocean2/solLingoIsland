@@ -29,28 +29,35 @@
         </Setter.Value>
       </Setter>
     </Style>
-    <!-- 可排序欄位表頭鈕（#177）：透明、粉字、hover 淡底；點擊排序（箭頭由碼後綴） -->
-    <Style x:Key="ColHeader" TargetType="Button">
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderThickness" Value="0"/>
+    <!-- 標準表格控制項 DataGrid 主題（#177）：透明底、粉表頭、細列分隔、粉選取；欄可拖曳調寬/排序/重排（內建） -->
+    <Style x:Key="GridColHeader" TargetType="DataGridColumnHeader">
       <Setter Property="Foreground" Value="#B0578D"/>
-      <Setter Property="FontSize" Value="11"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Padding" Value="3,1"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="hb" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
-              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="hb" Property="Background" Value="#22B0578D"/></Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Background" Value="#22F4C2D0"/>
+      <Setter Property="BorderBrush" Value="#33B0578D"/>
+      <Setter Property="BorderThickness" Value="0,0,1,1"/>
+      <Setter Property="Padding" Value="6,5"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="GridRow" TargetType="DataGridRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#22B0578D"/></Trigger>
+        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource PinkTint}"/></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="GridCell" TargetType="DataGridCell">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#3A2C33"/>
+      <Setter Property="Padding" Value="2,0"/>
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="Transparent"/>
+          <Setter Property="Foreground" Value="#3A2C33"/>
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </UserControl.Resources>
   <!-- 統一版面（#167／#177）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝兩子頁籤（搜尋下載／播放學習）＋共用狀態列 -->
@@ -121,13 +128,11 @@
                      Background="#66FFFFFF" ToolTip="Type keywords (prefilled from the active theme), then Search"/>
             <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
           </Grid>
-          <!-- 搜尋結果表格（#177，取代下拉）：縮圖｜名稱(點=載入到播放器)｜連結(開 YouTube 原頁)｜三種字幕狀態 Manual/Auto/Web -->
-          <!-- 字幕三態：Manual(人工、yt-dlp 免費自動探)｜Auto(自動、yt-dlp 免費自動探)｜Web(網路逐字稿、逐列按需查、花額度) -->
-          <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0" Grid.IsSharedSizeScope="True"
+          <!-- 搜尋結果：標準表格控制項 DataGrid（#177，取代自製 ItemsControl）——欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕 -->
+          <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0"
                   BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
             <Grid>
               <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
@@ -138,78 +143,107 @@
                 <TextBlock x:Name="FilterPlaceholder" Text="&#x1F50D; Filter by title…" Foreground="#9A6A82" FontSize="11.5"
                            Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
               </Grid>
-              <!-- 表頭（可點排序；箭頭示目前排序欄與方向，#177） -->
-              <Grid Grid.Row="1" Margin="8,2,8,2">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition SharedSizeGroup="RecCol"/>
-                  <ColumnDefinition SharedSizeGroup="ThumbCol"/>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition SharedSizeGroup="TimeCol"/>
-                  <ColumnDefinition SharedSizeGroup="LinkCol"/>
-                  <ColumnDefinition SharedSizeGroup="ManualCol"/>
-                  <ColumnDefinition SharedSizeGroup="AutoCol"/>
-                  <ColumnDefinition SharedSizeGroup="WebCol"/>
-                </Grid.ColumnDefinitions>
-                <Button x:Name="HdrRec" Grid.Column="0" Style="{StaticResource ColHeader}" Tag="RecommendScore" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="&#x2605; Rec" ToolTip="Recommended priority (default sort) — from subtitle quality + length. Click any header to sort."/>
-                <Button x:Name="HdrTitle" Grid.Column="2" Style="{StaticResource ColHeader}" Tag="Title" Click="OnSortHeader" HorizontalContentAlignment="Left" Content="Title" ToolTip="Video title — click a row to load; click header to sort A–Z"/>
-                <Button x:Name="HdrTime" Grid.Column="3" Style="{StaticResource ColHeader}" Tag="DurationSec" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Time" ToolTip="Length — click to sort (shorter first)"/>
-                <TextBlock Grid.Column="4" Text="Link" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,0"/>
-                <Button x:Name="HdrManual" Grid.Column="5" Style="{StaticResource ColHeader}" Tag="ManualRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Manual" ToolTip="Human-made subtitles (best); click to sort"/>
-                <Button x:Name="HdrAuto" Grid.Column="6" Style="{StaticResource ColHeader}" Tag="AutoRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Auto" ToolTip="Auto captions; click to sort"/>
-                <Button x:Name="HdrWeb" Grid.Column="7" Style="{StaticResource ColHeader}" Tag="WebRank" Click="OnSortHeader" HorizontalContentAlignment="Center" Content="Web" ToolTip="Web transcript (checked on demand); click to sort"/>
-              </Grid>
-              <ScrollViewer Grid.Row="2" MaxHeight="340" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="SearchResultsTable">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <Border BorderBrush="#22B0578D" BorderThickness="0,1,0,0" Padding="0,3">
-                        <Grid Margin="8,0">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition SharedSizeGroup="RecCol"/>
-                            <ColumnDefinition SharedSizeGroup="ThumbCol"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition SharedSizeGroup="TimeCol"/>
-                            <ColumnDefinition SharedSizeGroup="LinkCol"/>
-                            <ColumnDefinition SharedSizeGroup="ManualCol"/>
-                            <ColumnDefinition SharedSizeGroup="AutoCol"/>
-                            <ColumnDefinition SharedSizeGroup="WebCol"/>
-                          </Grid.ColumnDefinitions>
-                          <!-- 推薦優序（第一欄，#177）：星等由規則算（字幕品質＋片長），預設以此排序 -->
-                          <TextBlock Grid.Column="0" Text="{Binding RecommendStars}" ToolTip="{Binding RecommendTip}"
-                                     Foreground="#E0A82E" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="4,0"/>
-                          <Image Grid.Column="1" Source="{Binding ThumbSource}" Width="56" Height="36"
-                                 Stretch="UniformToFill" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                          <Button Grid.Column="2" Content="{Binding Title}" Click="OnSearchRowLoad" Cursor="Hand"
-                                  HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0"
-                                  Foreground="#3A2C33" Padding="2" VerticalAlignment="Center"
-                                  ToolTip="Load this video into the player"/>
-                          <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#6D3A4D"
-                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5" Margin="6,0"/>
-                          <TextBlock Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="6,0">
-                            <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink"
-                                       ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
-                          </TextBlock>
-                          <!-- 三種字幕狀態徽章：Manual(綠)｜Auto(琥珀) 免費自動填；Web(藍) 逐列按需查 -->
-                          <TextBlock Grid.Column="5" Text="{Binding ManualText}" Foreground="{Binding ManualBrush}"
-                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
-                                     ToolTip="Human-made subtitles"/>
-                          <TextBlock Grid.Column="6" Text="{Binding AutoText}" Foreground="{Binding AutoBrush}"
-                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
-                                     ToolTip="Auto-generated captions"/>
-                          <Grid Grid.Column="7" Margin="6,0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
-                                    Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
-                                    FontSize="11" Padding="6,2" Cursor="Hand"
-                                    ToolTip="Check the web for a transcript to label speakers (uses your OpenAI key; costs a small fee)"/>
-                            <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
-                                       FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
-                          </Grid>
+              <!-- 標準表格 DataGrid（#177）：欄可拖曳調寬/重排、點表頭排序皆內建；篩選沿用上方過濾框（ListCollectionView.Filter）；雙擊列亦載入 -->
+              <DataGrid x:Name="SearchResultsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                        HeadersVisibility="Column" CanUserResizeColumns="True" CanUserReorderColumns="True"
+                        CanUserSortColumns="True" CanUserResizeRows="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                        SelectionMode="Single" SelectionUnit="FullRow" GridLinesVisibility="Horizontal"
+                        HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
+                        BorderThickness="0" MaxHeight="360" RowHeight="44" FontSize="12"
+                        HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                        MouseDoubleClick="OnGridDoubleClickLoad"
+                        ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
+                <DataGrid.Columns>
+                  <!-- 推薦優序（規則：字幕品質＋片長）；預設排序欄 -->
+                  <DataGridTemplateColumn Header="&#x2605; Rec" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="46">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding RecommendStars}" ToolTip="{Binding RecommendTip}" Foreground="#E0A82E"
+                                   FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 縮圖 -->
+                  <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="64">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Image Source="{Binding ThumbSource}" Width="56" Height="36" Stretch="UniformToFill" VerticalAlignment="Center"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 名稱（排序 A–Z；可調寬；佔滿剩餘寬） -->
+                  <DataGridTextColumn Header="Title" Binding="{Binding Title}" SortMemberPath="Title" Width="*" MinWidth="140">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                        <Setter Property="ToolTip" Value="{Binding Title}"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
+                  <!-- 片長（排序鍵＝秒數 DurationSec） -->
+                  <DataGridTextColumn Header="Time" Binding="{Binding DurationText}" SortMemberPath="DurationSec" MinWidth="48">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Foreground" Value="#6D3A4D"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
+                  <!-- 載入鈕（已在清單者停用、標「Added」灰） -->
+                  <DataGridTemplateColumn Header="Load" CanUserSort="False" CanUserResize="False" MinWidth="58">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Button Content="{Binding LoadText}" IsEnabled="{Binding CanLoad}" Click="OnSearchRowLoad"
+                                Padding="10,3" Margin="2" Cursor="Hand" VerticalAlignment="Center"
+                                ToolTip="Load into the player (disabled if already in your Videos list)"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 連結（開 YouTube 原頁） -->
+                  <DataGridTemplateColumn Header="Link" CanUserSort="False" CanUserResize="False" MinWidth="56">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center">
+                          <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink" ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
+                        </TextBlock>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 三種字幕狀態（排序鍵＝Rank；Manual綠／Auto琥珀免費自動填、Web藍逐列按需查） -->
+                  <DataGridTemplateColumn Header="Manual" SortMemberPath="ManualRank" CanUserResize="False" MinWidth="52">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding ManualText}" Foreground="{Binding ManualBrush}" FontWeight="SemiBold"
+                                   FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Human-made subtitles"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Auto" SortMemberPath="AutoRank" CanUserResize="False" MinWidth="46">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding AutoText}" Foreground="{Binding AutoBrush}" FontWeight="SemiBold"
+                                   FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Auto-generated captions"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Web" SortMemberPath="WebRank" CanUserResize="False" MinWidth="64">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
+                                  Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
+                                  FontSize="11" Padding="6,2" Cursor="Hand"
+                                  ToolTip="Check the web for a transcript (uses your OpenAI key; costs a small fee)"/>
+                          <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
+                                     FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
                         </Grid>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                </DataGrid.Columns>
+              </DataGrid>
             </Grid>
           </Border>
 
