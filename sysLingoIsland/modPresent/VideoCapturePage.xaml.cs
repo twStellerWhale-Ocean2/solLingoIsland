@@ -399,7 +399,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     // ---- 依關鍵字搜尋 YouTube（#171）：結果下拉選單、點選直接載入 ----
 
-    /// <summary>以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），結果填入下拉選單（縮圖＋標題）並展開；新搜尋取代進行中者。</summary>
+    /// <summary>以 SearchBox 關鍵字搜尋 YouTube（yt-dlp），套搜尋選項（上傳日期 sp 篩／長度 client 篩／最多筆數），結果填入表格；新搜尋取代進行中者。</summary>
     private async Task DoSearchAsync()
     {
         var q = SearchBox.Text?.Trim() ?? "";
@@ -411,18 +411,31 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SetStatus($"Searching YouTube for “{q}”…");
         try
         {
-            var results = await _searcher.SearchAsync(q, 8, ct);
+            var dateToken = (DateFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
+            var lengthKey = (LengthFilter.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "";
+            var max = MaxResultsValue();
+            var fetch = string.IsNullOrEmpty(lengthKey) ? max : Math.Min(max * 3, 50); // 有長度篩→多抓再 client 篩、湊近 max
+            var results = await _searcher.SearchAsync(q, fetch, ct, string.IsNullOrEmpty(dateToken) ? null : dateToken);
             if (ct.IsCancellationRequested) return;
+            results = VideoSearchFilter.ByLength(results, lengthKey, max);
             PopulateResults(results);
             SetStatus(results.Count > 0
-                ? $"{results.Count} result(s) — pick one to load, or paste a link and Load."
-                : "No results. Try different keywords, or paste a link.");
+                ? $"{results.Count} result(s) — click a row's Load button, or paste a link and Load."
+                : "No results. Try different keywords or relax the filters.");
         }
         catch (SubtitleException ex) { SetStatus(ex.Message); }
         catch (OperationCanceledException) { /* 被新搜尋取代／取消 → 靜默 */ }
         catch (Exception ex) { SetStatus("Search failed: " + ex.Message); }
         finally { SearchBtn.IsEnabled = true; }
     }
+
+    /// <summary>最多筆數選項值（10/25/50；預設 25、界 1–50）。</summary>
+    private int MaxResultsValue()
+    {
+        var s = (MaxResults.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
+        return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 50) : 25;
+    }
+
 
     /// <summary>把搜尋結果填入可排序/過濾表格（#177）：即時顯示縮圖/名稱/連結/片長/推薦星等；內嵌字幕背景逐列免費探測填入；預設依推薦分排序。</summary>
     private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
@@ -466,6 +479,54 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }).ToList();
         try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
         if (!ct.IsCancellationRequested) { try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
+        // 預設開啟自動網搜（#184，USR 選「只查前幾筆」）：探測落定、推薦排名反映字幕後，對推薦分前 N 列自動網搜（花額度、背景、無模態）
+        if (!ct.IsCancellationRequested && AutoWebCheck.IsChecked == true)
+        {
+            await AutoCheckWebTopAsync(rows, AutoWebCountValue(), ct);
+        }
+    }
+
+    /// <summary>自動網搜筆數選項值（3/5/10；預設 5、界 1–20）。</summary>
+    private int AutoWebCountValue()
+    {
+        var s = (AutoWebCount.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
+        return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 20) : 5;
+    }
+
+    /// <summary>
+    /// 自動網搜推薦分前 <paramref name="topN"/> 列（#184）：只查尚未查者、逐一（不模態）、累計費用以台幣顯示於狀態列。
+    /// 無金鑰則略過；新搜尋（ct 取消）即止；個別失敗還原該列供手動再試。
+    /// </summary>
+    private async Task AutoCheckWebTopAsync(IReadOnlyList<SearchRow> rows, int topN, CancellationToken ct)
+    {
+        var targets = rows.Where(r => r.WebRank == 0)                                   // 未查過者
+                          .OrderByDescending(r => r.RecommendScore).ThenBy(r => r.DurationSec ?? int.MaxValue)
+                          .Take(topN).ToList();
+        if (targets.Count == 0) { return; }
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY")))
+        {
+            SetStatus("Auto web-check skipped — OPENAI_API_KEY not set. Set it and restart to use web lookup.");
+            return;
+        }
+        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name;
+        double usd = 0; var done = 0;
+        foreach (var row in targets)
+        {
+            if (ct.IsCancellationRequested) { return; }
+            row.SetWebChecking();
+            try
+            {
+                var result = await _webProbe.ProbeAsync(row.Title, null, ct, themeForAi);
+                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
+                else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
+                foreach (var u in result.Usages) { usd += AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0; }
+                done++;
+                SetStatus($"Auto web-check {done}/{targets.Count} — 約 NT${AiCost.ToTwd(usd):0.##} so far…");
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception) { row.ResetWebButton(); } // 失敗→還原，可手動再查
+        }
+        SetStatus($"Auto web-check done — {done} checked，估算約 NT${AiCost.ToTwd(usd):0.##}（含網搜費，估算；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）。");
     }
 
     /// <summary>預設排序（#177）：推薦分遞減、同分短片優先。使用者點 DataGrid 表頭排序時由 DataGrid 接手覆寫。</summary>

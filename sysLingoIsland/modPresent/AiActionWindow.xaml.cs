@@ -68,12 +68,13 @@ public partial class AiActionWindow : Window
             if (est is null) { anyUnknown = true; } else { costSum += est.Value; }
             if (u.WebSearch) { anyWeb = true; }
         }
+        var twd = AiCost.ToTwd(costSum);
         var tokens = $"Tokens: {inTot:N0} in + {outTot:N0} out across {usages.Count} call(s)";
         var cost = anyUnknown
-            ? $"Est. AI cost ≈ US${costSum:0.#####}+ (some models had no rate on file)"
-            : $"Est. AI cost ≈ US${costSum:0.#####}";
-        if (anyWeb) { cost += " (incl. web-search fee)"; }
-        CostText.Text = $"{tokens}.\n{cost}.\n(Estimate only — check OpenAI for current rates.)";
+            ? $"估算 AI 費用 ≈ 約 NT${twd:0.##}+（部分模型無單價）"
+            : $"估算 AI 費用 ≈ 約 NT${twd:0.##}";
+        if (anyWeb) { cost += "（含網搜工具費）"; }
+        CostText.Text = $"{tokens}.\n{cost}\n（估算，匯率約 US$1≈NT${AiCost.UsdToTwd:0}；實際請以 OpenAI 現價與匯率為準）";
     }
 
     private void Finish()

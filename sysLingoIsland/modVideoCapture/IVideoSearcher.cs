@@ -9,6 +9,6 @@ public sealed record VideoSearchResult(string VideoId, string Title, int? Durati
 /// </summary>
 public interface IVideoSearcher
 {
-    /// <summary>回關鍵字之前 <paramref name="max"/> 筆 YouTube 結果；空關鍵字回空清單；失敗擲 <see cref="SubtitleException"/>。</summary>
-    Task<IReadOnlyList<VideoSearchResult>> SearchAsync(string query, int max = 8, CancellationToken ct = default);
+    /// <summary>回關鍵字之前 <paramref name="max"/> 筆 YouTube 結果；<paramref name="uploadDateToken"/> 非空時以 YouTube 上傳日期篩選（sp token，如本月/今年）；空關鍵字回空清單；失敗擲 <see cref="SubtitleException"/>。</summary>
+    Task<IReadOnlyList<VideoSearchResult>> SearchAsync(string query, int max = 8, CancellationToken ct = default, string? uploadDateToken = null);
 }

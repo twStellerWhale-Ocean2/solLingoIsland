@@ -68,6 +68,45 @@
                      Background="#66FFFFFF" ToolTip="Type keywords (prefilled from the active theme), then Search"/>
             <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
           </Grid>
+          <!-- 搜尋選項（#184）：上傳日期（伺服器端 sp 篩）｜長度（client 依片長篩）｜最多筆數｜自動網搜前 N 筆（預設開、花額度） -->
+          <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Date:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="DateFilter" Width="108" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by upload date (YouTube)">
+                <ComboBoxItem Content="Any time" Tag="" IsSelected="True"/>
+                <ComboBoxItem Content="Today" Tag="EgIIAg%3D%3D"/>
+                <ComboBoxItem Content="This week" Tag="EgIIAw%3D%3D"/>
+                <ComboBoxItem Content="This month" Tag="EgIIBA%3D%3D"/>
+                <ComboBoxItem Content="This year" Tag="EgIIBQ%3D%3D"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Length:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="LengthFilter" Width="128" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by video length">
+                <ComboBoxItem Content="Any length" Tag="" IsSelected="True"/>
+                <ComboBoxItem Content="Short (&lt;4m)" Tag="short"/>
+                <ComboBoxItem Content="Medium (4–20m)" Tag="medium"/>
+                <ComboBoxItem Content="Long (&gt;20m)" Tag="long"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Max:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="MaxResults" Width="56" Height="26" VerticalContentAlignment="Center" ToolTip="Maximum number of results">
+                <ComboBoxItem Content="10"/>
+                <ComboBoxItem Content="25" IsSelected="True"/>
+                <ComboBoxItem Content="50"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
+              <CheckBox x:Name="AutoWebCheck" Content="Auto web-check top" IsChecked="True" VerticalAlignment="Center" Foreground="#B0578D"
+                        ToolTip="After each search, auto-check web transcripts for the top-N results by Pick score (uses your OpenAI key — costs a small fee each)"/>
+              <ComboBox x:Name="AutoWebCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center" ToolTip="How many top results to auto-check">
+                <ComboBoxItem Content="3"/>
+                <ComboBoxItem Content="5" IsSelected="True"/>
+                <ComboBoxItem Content="10"/>
+              </ComboBox>
+            </StackPanel>
+          </WrapPanel>
           <!-- 搜尋結果：標準表格控制項 DataGrid（#177，取代自製 ItemsControl）——欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕 -->
           <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0"
                   BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
@@ -89,7 +128,7 @@
                         CanUserSortColumns="True" CanUserResizeRows="False" CanUserAddRows="False" CanUserDeleteRows="False"
                         SelectionMode="Single" SelectionUnit="FullRow" GridLinesVisibility="Horizontal"
                         HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
-                        BorderThickness="0" MaxHeight="360" RowHeight="44" FontSize="12"
+                        BorderThickness="0" MaxHeight="500" RowHeight="44" FontSize="12"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
                         ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
                 <DataGrid.Columns>
