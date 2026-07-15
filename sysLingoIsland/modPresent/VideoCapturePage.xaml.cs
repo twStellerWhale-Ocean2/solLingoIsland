@@ -25,10 +25,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _populatingVideoPicker;                           // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
     private readonly ISpeakerEnricher _enricher;                   // 說話人來源疊加（epic #145 增量6：AI 推斷；會用到 API、按鈕觸發）
     private readonly ISpeakerEnricher _webEnricher;                // 說話人來源（增量6b）：OpenAI 網搜工具上網找逐字稿（會用到 API、按鈕觸發）
+    private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
-    private bool _populatingResults;                               // 填搜尋結果下拉期間抑制 SelectionChanged→載入
-    private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）
+    private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/內嵌+網路字幕狀態
+    private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
     private readonly DispatcherTimer _poll;
@@ -69,7 +70,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     public event Action<string>? AddToNotesRequested;
 
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
-                            ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IVideoSearcher searcher, SubtitleStore subtitles)
+                            ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IWebTranscriptProbe webProbe,
+                            IVideoSearcher searcher, SubtitleStore subtitles)
     {
         InitializeComponent();
         _fetcher = fetcher;
@@ -77,6 +79,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _themes = themes;
         _enricher = enricher;
         _webEnricher = webEnricher;
+        _webProbe = webProbe;
         _searcher = searcher;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -86,10 +89,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
         LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadFromInputAsync(); }; // 載入中兼作取消
         UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
-        // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果下拉點選直接載入
+        // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果以表格呈現，點名稱載入、點連結開原頁、按需查網路字幕（#177）
         SearchBtn.Click += (_, _) => _ = DoSearchAsync();
         SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { _ = DoSearchAsync(); } };
-        SearchResults.SelectionChanged += (_, _) => { if (!_populatingResults) { LoadSelectedResult(); } };
         ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
@@ -212,6 +214,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false;
         _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         _currentVideoId = id;  // 字幕存檔鍵（#174）
+        SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
         ClearCues();
         SubtitleBand.Inlines.Clear();
         SetControls(false);
@@ -374,9 +377,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             Margin = new System.Windows.Thickness(0, 0, 8, 0),
             VerticalAlignment = System.Windows.VerticalAlignment.Center,
         };
-        try { img.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri($"https://img.youtube.com/vi/{videoId}/default.jpg")); }
-        catch { /* 縮圖載入失敗留空 */ }
+        img.Source = MakeThumbSource(videoId);
         return img;
+    }
+
+    /// <summary>YouTube 縮圖 ImageSource（<c>img.youtube.com/vi/{id}/default.jpg</c>）；離線/失敗回 null（不致命）。清單項與搜尋結果表格共用（#177）。</summary>
+    private static System.Windows.Media.ImageSource? MakeThumbSource(string videoId)
+    {
+        try { return new System.Windows.Media.Imaging.BitmapImage(new Uri($"https://img.youtube.com/vi/{videoId}/default.jpg")); }
+        catch { return null; }
     }
 
     private static string FormatTime(string iso) =>
@@ -409,37 +418,77 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         finally { SearchBtn.IsEnabled = true; }
     }
 
+    /// <summary>把搜尋結果填入表格（#177）：縮圖/名稱/連結即時顯示；內嵌字幕於背景逐列免費探測填入；網路字幕留待逐列按需查。</summary>
     private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
     {
-        _populatingResults = true;
-        SearchResults.Items.Clear();
-        foreach (var r in results)
+        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title)).ToList();
+        SearchResultsTable.ItemsSource = _searchRows;
+        SearchResultsPanel.Visibility = _searchRows.Count > 0
+            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        if (_searchRows.Count > 0)
         {
-            var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-            sp.Children.Add(MakeThumb(r.VideoId, 44, 28));
-            sp.Children.Add(new System.Windows.Controls.TextBlock
-            {
-                Text = r.Title,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
-                MaxWidth = 320,
-            });
-            SearchResults.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = sp, Tag = r.VideoId });
+            _ = ProbeEmbeddedForRowsAsync(_searchRows, _searchCts?.Token ?? CancellationToken.None); // 免費、背景、可被新搜尋取消
         }
-        SearchResults.SelectedIndex = -1;
-        SearchResults.Visibility = results.Count > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-        _populatingResults = false;
-        if (results.Count > 0) { SearchResults.IsDropDownOpen = true; } // 自動展開供直接點選
     }
 
-    /// <summary>下拉選一結果→載入該影片（加入清單、記錄使用中主題）。</summary>
-    private void LoadSelectedResult()
+    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；新搜尋（token 取消）即止。</summary>
+    private async Task ProbeEmbeddedForRowsAsync(IReadOnlyList<SearchRow> rows, CancellationToken ct)
     {
-        var vid = (SearchResults.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string;
-        if (string.IsNullOrEmpty(vid)) { return; }
-        SearchResults.IsDropDownOpen = false;
-        UrlBox.Text = vid;
-        _ = LoadVideoAsync(vid, addToStore: true);
+        using var gate = new SemaphoreSlim(4); // 限流：最多 4 個 yt-dlp 併發，免一次開 8 個行程
+        var tasks = rows.Select(async row =>
+        {
+            try
+            {
+                await gate.WaitAsync(ct);
+                try
+                {
+                    var info = await _fetcher.ProbeEmbeddedAsync(row.VideoId, ct);
+                    if (info.HasManual) { row.SetEmbedded("Manual", EmbGreen); }       // 人工字幕＝最佳學習素材
+                    else if (info.HasAuto) { row.SetEmbedded("Auto", EmbAmber); }       // 僅自動字幕（機器轉錄）
+                    else { row.SetEmbedded("None", EmbGray); }                          // 查無英文字幕
+                }
+                finally { gate.Release(); }
+            }
+            catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
+            catch (Exception) { row.SetEmbedded("—", EmbGray); }                        // 私人/移除/逾時→無法確認
+        }).ToList();
+        try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
+    }
+
+    /// <summary>表格點名稱→載入該影片到播放器（加入清單、記錄使用中主題）。</summary>
+    private void OnSearchRowLoad(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
+        UrlBox.Text = row.VideoId;
+        _ = LoadVideoAsync(row.VideoId, addToStore: true);
+    }
+
+    /// <summary>表格點連結→於系統預設瀏覽器開 YouTube 原頁（沿用 AboutPage 開連結作法）。</summary>
+    private void OnOpenExternalLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception ex) { SetStatus("Could not open link: " + ex.Message); }
+        e.Handled = true;
+    }
+
+    /// <summary>表格點「🌐 Check」→按需查該片是否有網路逐字稿（花 OpenAI 額度）；以對話視窗顯示進度與費用，結果回填該列。</summary>
+    private void OnSearchRowWebProbe(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
+        row.SetWebChecking();
+        var title = row.Title;
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Check web subtitles",
+            async (report, ct) =>
+            {
+                var progress = new System.Progress<string>(s => report(s));
+                var result = await _webProbe.ProbeAsync(title, progress, ct);
+                if (result.Found) { row.SetWebResult("✓ " + Truncate(result.Source, 22), EmbGreen); }
+                else { row.SetWebResult("✗ none", EmbGray); }
+                return result.Usages
+                    .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
+                    .ToList();
+            });
+        if (row.WebResultVisibility != System.Windows.Visibility.Visible) { row.ResetWebButton(); } // 取消/失敗→還原按鈕供再試
     }
 
     /// <summary>以使用中主題之搜尋關鍵字預填搜尋框（#171）；使用者已輸入則不覆寫。</summary>
@@ -511,6 +560,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SubtitleBand.Inlines.Clear();
         SetControls(false);
         UrlBox.Text = "";
+        WatchUrlRow.Visibility = System.Windows.Visibility.Collapsed; // #177：無載入→隱藏超連結網址
         UpdateVideoThemePicker(); // _currentVideoItemId null → 停用
         SetStatus("No video loaded. Search or paste a link to load one.");
     }
@@ -955,6 +1005,88 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public string SpeakerLabel => string.IsNullOrEmpty(Cue.Speaker) ? "" : Cue.Speaker + ": ";
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
         public string Text => Cue.Text;
+    }
+
+    /// <summary>
+    /// 搜尋結果表格一列 view-model（#177）：縮圖/名稱/連結建構即定；內嵌字幕（背景免費探測）與網路字幕（按需查）
+    /// 狀態非同步更新，故 <see cref="System.ComponentModel.INotifyPropertyChanged"/>。網路字幕以三態呈現：未查＝按鈕、查中＝按鈕（「…」停用）、完成＝結果文字。
+    /// </summary>
+    private sealed class SearchRow : System.ComponentModel.INotifyPropertyChanged
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        private void On([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
+
+        public string VideoId { get; }
+        public string Title { get; }
+        public string WatchUrl { get; }
+        public Uri WatchUri { get; }
+        public System.Windows.Media.ImageSource? ThumbSource { get; }
+
+        public SearchRow(string videoId, string title)
+        {
+            VideoId = videoId;
+            Title = title;
+            WatchUrl = "https://www.youtube.com/watch?v=" + videoId;
+            WatchUri = new Uri(WatchUrl);
+            ThumbSource = MakeThumbSource(videoId);
+        }
+
+        // 內嵌字幕（yt-dlp 免費探測、背景非同步填入）
+        private string _embeddedStatus = "checking…";
+        public string EmbeddedStatus { get => _embeddedStatus; private set { _embeddedStatus = value; On(); } }
+        private System.Windows.Media.Brush _embeddedBrush = EmbGray;
+        public System.Windows.Media.Brush EmbeddedBrush { get => _embeddedBrush; private set { _embeddedBrush = value; On(); } }
+        public void SetEmbedded(string status, System.Windows.Media.Brush brush) { EmbeddedStatus = status; EmbeddedBrush = brush; }
+
+        // 網路字幕（按需查、花額度）：三態
+        private string _webButtonText = "\U0001F310 Check";
+        public string WebButtonText { get => _webButtonText; private set { _webButtonText = value; On(); } }
+        private bool _webButtonEnabled = true;
+        public bool WebButtonEnabled { get => _webButtonEnabled; private set { _webButtonEnabled = value; On(); } }
+        private System.Windows.Visibility _webButtonVisibility = System.Windows.Visibility.Visible;
+        public System.Windows.Visibility WebButtonVisibility { get => _webButtonVisibility; private set { _webButtonVisibility = value; On(); } }
+        private string _webResultText = "";
+        public string WebResultText { get => _webResultText; private set { _webResultText = value; On(); } }
+        private System.Windows.Media.Brush _webResultBrush = EmbGray;
+        public System.Windows.Media.Brush WebResultBrush { get => _webResultBrush; private set { _webResultBrush = value; On(); } }
+        private System.Windows.Visibility _webResultVisibility = System.Windows.Visibility.Collapsed;
+        public System.Windows.Visibility WebResultVisibility { get => _webResultVisibility; private set { _webResultVisibility = value; On(); } }
+
+        /// <summary>切到「查中」：按鈕變「…」且停用。</summary>
+        public void SetWebChecking() { WebButtonText = "…"; WebButtonEnabled = false; }
+        /// <summary>切到「完成」：隱藏按鈕、顯示結果文字（✓有／✗無）。</summary>
+        public void SetWebResult(string text, System.Windows.Media.Brush brush)
+        {
+            WebButtonVisibility = System.Windows.Visibility.Collapsed;
+            WebResultText = text; WebResultBrush = brush;
+            WebResultVisibility = System.Windows.Visibility.Visible;
+        }
+        /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
+        public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; }
+    }
+
+    /// <summary>內容區塊顯示目前影片之可點超連結網址（#177）：設定 Hyperlink 目標與顯示文字並顯示該列。</summary>
+    private void SetWatchUrl(string videoId)
+    {
+        var url = "https://www.youtube.com/watch?v=" + videoId;
+        WatchUrlText.Text = url;
+        WatchUrlLink.NavigateUri = new Uri(url);
+        WatchUrlRow.Visibility = System.Windows.Visibility.Visible;
+    }
+
+    private static string Truncate(string s, int n) => string.IsNullOrEmpty(s) || s.Length <= n ? s : s.Substring(0, n) + "…";
+
+    // 搜尋結果表格徽章色（#177）：人工=綠、自動=琥珀、無/不明=灰；凍結供背景探測續程更新安全。
+    private static readonly System.Windows.Media.Brush EmbGreen = FrozenBrush(0x2E, 0x7D, 0x32);
+    private static readonly System.Windows.Media.Brush EmbAmber = FrozenBrush(0xB0, 0x6A, 0x00);
+    private static readonly System.Windows.Media.Brush EmbGray = FrozenBrush(0x8A, 0x8A, 0x8A);
+
+    private static System.Windows.Media.Brush FrozenBrush(byte r, byte g, byte b)
+    {
+        var br = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+        br.Freeze();
+        return br;
     }
 
     private void SetStatus(string msg) => StatusText.Text = msg;

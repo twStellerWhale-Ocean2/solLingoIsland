@@ -11,7 +11,7 @@ namespace LingoIsland.Video;
 /// find 用能上網之強模型（gpt-4.1）、align 用便宜模型（gpt-4o-mini）；各步經 <c>progress</c> 回報、混模型用量各記一筆。
 /// <b>字幕文字/時間仍為 yt-dlp、本來源只補說話人</b>。讀 <c>OPENAI_API_KEY</c>；無金鑰／HTTP 非 2xx／逾時／解析失敗一律擲 <see cref="SpeakerEnrichException"/>。
 /// </summary>
-public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher
+public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptProbe
 {
     private readonly string _findModel;
     private readonly string _alignModel;
@@ -85,6 +85,30 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher
 
         progress?.Report("Combining the aligned chunks…");
         return new SpeakerEnrichResult(speakers, usages);
+    }
+
+    /// <summary>
+    /// 網路逐字稿可用性探測（#177）：只跑管線第一步「find」——一次 <c>web_search</c> 找逐字稿、回是否找到＋來源，
+    /// <b>不做逐塊對齊</b>（故單次、便宜）。供搜尋結果表格「網路字幕」欄按需查。判定「有」＝模型回報 found 且逐字稿內文 ≥40 字。
+    /// </summary>
+    public async Task<WebTranscriptProbeResult> ProbeAsync(
+        string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new SpeakerEnrichException("OPENAI_API_KEY environment variable is not set — cannot check web subtitles. Set it and restart.");
+        }
+
+        progress?.Report("Searching the web for a transcript…");
+        var (json, usage) = await CallAsync(key!, BuildFindRequest(videoTitle, retry: false), ct);
+        var usages = new[] { usage with { Model = _findModel, WebSearch = true } };
+        var find = SpeakerInference.ParseFindResult(json);
+        var found = find.Found && find.Transcript.Trim().Length >= 40;
+        progress?.Report(found
+            ? $"Found a web transcript ({Truncate(find.Source, 60)})."
+            : "No usable web transcript found for this video.");
+        return new WebTranscriptProbeResult(found, find.Source ?? "", usages);
     }
 
     private object BuildFindRequest(string? videoTitle, bool retry) => new

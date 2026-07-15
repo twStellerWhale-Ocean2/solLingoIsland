@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 
 namespace LingoIsland.Video;
 
@@ -16,6 +17,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
 {
     private readonly string _ytDlpPath;
     private readonly int _timeoutSec;
+    private const int ProbeTimeoutSec = 25; // 內嵌字幕探測（只查 metadata）用較短逾時，免整排搜尋結果卡住
 
     public YtDlpSubtitleFetcher(string ytDlpPath = "yt-dlp", int timeoutSec = 60)
     {
@@ -40,7 +42,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
             const string common = "--skip-download --sub-langs \"en.*\" --no-playlist";
 
             // 第一趟：僅人工（真人）字幕，取 VTT——人工字幕不滾動、句級乾淨，到句暫停體驗最佳。查得即用、標記非自動。
-            await RunAsync($"{common} --sub-format vtt --write-subs -o \"{outTemplate}\" \"{url}\"", ct);
+            await RunYtDlpAsync($"{common} --sub-format vtt --write-subs -o \"{outTemplate}\" \"{url}\"", _timeoutSec, "Fetching subtitles", ct);
             var manual = PickSub(dir, ".vtt");
             if (manual is not null)
             {
@@ -51,7 +53,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
             // 第二趟：無人工字幕→退自動字幕，取 json3——YouTube 自動字幕之 VTT 為逐字滾動渲染（每 cue 重複前一 cue ~半）會破碎；
             // json3 為事件級結構、乾淨無滾動。以 SubtitleParser.ParseJson3Timed 解析＋CoalesceCues 併句為 start-only、標記為自動（機器轉錄）供 UI 提示。
             ClearSubs(dir);
-            var (exit, stderr) = await RunAsync($"{common} --sub-format json3 --write-auto-subs -o \"{outTemplate}\" \"{url}\"", ct);
+            var (exit, _, stderr) = await RunYtDlpAsync($"{common} --sub-format json3 --write-auto-subs -o \"{outTemplate}\" \"{url}\"", _timeoutSec, "Fetching subtitles", ct);
             var auto = PickSub(dir, ".json3");
             if (auto is null)
             {
@@ -76,6 +78,56 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
         }
     }
 
+    /// <summary>
+    /// 探測內嵌英文字幕可用性（#177）：以 <c>--print "%(subtitles)j"</c>／<c>"%(automatic_captions)j"</c> 只印 metadata（兩行 JSON），
+    /// <b>不下載字幕、不下載影片</b>。以較短逾時避免整排結果卡住。取得失敗（私人／移除／逾時／yt-dlp 缺失）擲 <see cref="SubtitleException"/>。
+    /// </summary>
+    public async Task<EmbeddedSubtitleInfo> ProbeEmbeddedAsync(string videoUrlOrId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(videoUrlOrId))
+        {
+            throw new SubtitleException("Please paste a YouTube link or video ID.");
+        }
+        var url = videoUrlOrId.Trim();
+        // 兩個 --print 依序輸出兩行：行1＝subtitles（人工）、行2＝automatic_captions（自動）之 JSON 物件（鍵為語碼）。
+        var args = $"--skip-download --no-warnings --no-playlist --print \"%(subtitles)j\" --print \"%(automatic_captions)j\" \"{url}\"";
+        var (exit, stdout, stderr) = await RunYtDlpAsync(args, ProbeTimeoutSec, "Checking subtitles", ct);
+        if (exit != 0 && stdout.Trim().Length == 0)
+        {
+            throw new SubtitleException("Could not check subtitles: " + FirstMeaningfulLine(stderr));
+        }
+        var lines = stdout.Replace("\r", "").Split('\n').Where(l => l.Trim().Length > 0).ToList();
+        var subsJson = lines.Count > 0 ? lines[0] : "";
+        var autoJson = lines.Count > 1 ? lines[1] : "";
+        return ParseEmbeddedAvailability(subsJson, autoJson);
+    }
+
+    /// <summary>解析 yt-dlp <c>--print "%(subtitles)j"</c>／<c>"%(automatic_captions)j"</c> 兩段 JSON 物件為英文字幕可用性（#177）：任一鍵為英文語碼（en／en-US／en-GB／en-orig…）即視為有。非物件／空／malformed→false。internal 供單元測試。</summary>
+    internal static EmbeddedSubtitleInfo ParseEmbeddedAvailability(string subtitlesJson, string autoCaptionsJson) =>
+        new(HasEnglishKey(subtitlesJson), HasEnglishKey(autoCaptionsJson));
+
+    /// <summary>JSON 物件是否含英文語碼鍵：<c>en</c> 或以 <c>en-</c>／<c>en.</c>／<c>en_</c> 起頭（涵蓋 en-US、en-GB、en-orig、a.en 等變體）。</summary>
+    private static bool HasEnglishKey(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json.Trim());
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                var k = p.Name;
+                if (k.StartsWith("en", StringComparison.OrdinalIgnoreCase)
+                    && (k.Length == 2 || k[2] is '-' or '.' or '_'))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch (JsonException) { return false; }
+    }
+
     /// <summary>自暫存夾挑英文字幕檔（副檔名 <paramref name="ext"/>，如 <c>.vtt</c>／<c>.json3</c>）：優先精確 <c>.en{ext}</c>（自動字幕之翻譯版通常較 en-orig 乾淨）、次非 orig、末任一；無則 null。</summary>
     private static string? PickSub(string dir, string ext)
     {
@@ -96,7 +148,8 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
         }
     }
 
-    private async Task<(int exit, string stderr)> RunAsync(string args, CancellationToken ct)
+    /// <summary>啟動 yt-dlp、回 (離開碼, stdout, stderr)；逾時或外部取消殺行程，逾時擲 <see cref="SubtitleException"/>（訊息含 <paramref name="timeoutWhat"/>），外部取消傳遞 <see cref="OperationCanceledException"/>。</summary>
+    private async Task<(int exit, string stdout, string stderr)> RunYtDlpAsync(string args, int timeoutSec, string timeoutWhat, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
         {
@@ -126,7 +179,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
         using (p)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));
+            cts.CancelAfter(TimeSpan.FromSeconds(timeoutSec));
             var stdoutTask = p.StandardOutput.ReadToEndAsync(cts.Token);
             var stderrTask = p.StandardError.ReadToEndAsync(cts.Token);
             try
@@ -138,13 +191,13 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
                 try { p.Kill(entireProcessTree: true); } catch { /* ignore */ } // 逾時或外部取消皆殺行程、免孤兒 yt-dlp
                 if (!ct.IsCancellationRequested)
                 {
-                    throw new SubtitleException($"Fetching subtitles timed out ({_timeoutSec}s).");
+                    throw new SubtitleException($"{timeoutWhat} timed out ({timeoutSec}s).");
                 }
                 throw; // 外部取消（新 Load／取消鈕）→ 傳遞 OperationCanceledException，UI 顯示「Load canceled.」
             }
+            var stdout = await stdoutTask;
             var stderr = await stderrTask;
-            _ = await stdoutTask;
-            return (p.ExitCode, stderr);
+            return (p.ExitCode, stdout, stderr);
         }
     }
 
