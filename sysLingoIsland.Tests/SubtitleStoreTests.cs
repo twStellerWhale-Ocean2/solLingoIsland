@@ -68,6 +68,59 @@ public class SubtitleStoreTests
     }
 
     [Fact]
+    public void SaveWebTranscript_StoresRawTextAndSource()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new SubtitleStore(dir);
+            store.Save("vid", false, new List<SubtitleCue> { new("Hi", 0.0) });
+            store.SaveWebTranscript("vid", "Ryder: Hi\nChase: Ready!", "PAW Patrol Wiki (fandom)");
+            var loaded = store.TryLoad("vid");
+            Assert.NotNull(loaded);
+            Assert.Equal("Ryder: Hi\nChase: Ready!", loaded!.WebTranscript);
+            Assert.Equal("PAW Patrol Wiki (fandom)", loaded.WebTranscriptSource);
+            Assert.NotEqual("", loaded.WebTranscriptAt);      // 時間有寫入
+            Assert.Single(loaded.Cues);                        // 既有 cues 保留
+        }
+        finally { TryDelete(dir); }
+    }
+
+    [Fact]
+    public void Save_PreservesExistingWebTranscript()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new SubtitleStore(dir);
+            store.Save("vid", false, new List<SubtitleCue> { new("Hi", 0.0) });
+            store.SaveWebTranscript("vid", "Ryder: Hi", "src");
+            // 之後覆寫 cue（例如再標說話人）不應清掉逐字稿原文
+            store.Save("vid", false, new List<SubtitleCue> { new("Hi", 0.0, "Ryder"), new("Bark", 1.0) });
+            var loaded = store.TryLoad("vid");
+            Assert.Equal("Ryder: Hi", loaded!.WebTranscript);  // 逐字稿保留
+            Assert.Equal("src", loaded.WebTranscriptSource);
+            Assert.Equal(2, loaded.Cues.Count);                // cue 已更新
+            Assert.Equal("Ryder", loaded.Cues[0].Speaker);
+        }
+        finally { TryDelete(dir); }
+    }
+
+    [Fact]
+    public void SaveWebTranscript_BlankIgnored()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new SubtitleStore(dir);
+            store.Save("vid", false, new List<SubtitleCue> { new("Hi", 0.0) });
+            store.SaveWebTranscript("vid", "   ", "src");
+            Assert.Null(store.TryLoad("vid")!.WebTranscript);  // 空白略過
+        }
+        finally { TryDelete(dir); }
+    }
+
+    [Fact]
     public void Clear_RemovesAll()
     {
         var dir = TempDir();

@@ -15,8 +15,11 @@ public interface ISpeakerEnricher
 /// <summary>某次 AI 呼叫之 token 用量＋模型＋是否含 web_search（供費用估算，AI 動作對話視窗）。</summary>
 public sealed record SpeakerUsage(int InputTokens, int OutputTokens, int TotalTokens, string Model = "", bool WebSearch = false);
 
-/// <summary>說話人來源之結果：逐句說話人（null＝該句未知）＋本流程各 API 呼叫之用量（多筆；混模型時逐筆估價再加總）。</summary>
-public sealed record SpeakerEnrichResult(IReadOnlyList<string?> Speakers, IReadOnlyList<SpeakerUsage> Usages);
+/// <summary>
+/// 說話人來源之結果：逐句說話人（null＝該句未知）＋本流程各 API 呼叫之用量（多筆；混模型時逐筆估價再加總）。
+/// <see cref="Transcript"/>／<see cref="TranscriptSource"/>：網搜來源（🌐 Script）找到並用以標說話人之**逐字稿原文與來源**（#189：存入該片參考檔供檢視）；純推斷來源（AI 分析）無、留 null。
+/// </summary>
+public sealed record SpeakerEnrichResult(IReadOnlyList<string?> Speakers, IReadOnlyList<SpeakerUsage> Usages, string? Transcript = null, string? TranscriptSource = null);
 
 /// <summary>說話人疊加之明確可讀失敗（無金鑰、網路錯、逾時、回應無法解析等）——中止該次疊加、不當機不無聲失敗。</summary>
 public sealed class SpeakerEnrichException : Exception

@@ -151,6 +151,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
         ClearVideosBtn.Click += (_, _) => OnClearVideos(); // #165 清空影片清單
+        OpenFolderBtn.Click += (_, _) => OpenSubtitleFolder(); // #189：開啟字幕檔資料夾（含 🌐 Script 逐字稿原文）
         VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
         VideoThemePicker.SelectionChanged += (_, _) => { if (!_populatingVideoPicker) { OnVideoThemePicked(); } }; // 內容區塊改指派所屬主題（#173）
         // 刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
@@ -799,6 +800,18 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
         catch (Exception ex) { SetStatus("Could not open link: " + ex.Message); }
         e.Handled = true;
+    }
+
+    /// <summary>開啟字幕檔資料夾（#189）：檔案總管開 <c>%APPDATA%\LingoIsland\subtitles</c>（不存在先建）；每支影片之字幕與 🌐 Script 逐字稿原文皆存於此、可檢視。</summary>
+    private void OpenSubtitleFolder()
+    {
+        try
+        {
+            var dir = SubtitleStore.DefaultDir;
+            Directory.CreateDirectory(dir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex) { SetStatus("Could not open the subtitle folder: " + ex.Message); }
     }
 
     /// <summary>表格點「🌐 Check」→按需查該片是否有網路逐字稿（花 OpenAI 額度）；以對話視窗顯示進度與費用，結果回填該列。</summary>
@@ -1483,8 +1496,10 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
                 _row2Applied = web ? Row2Method.Script : Row2Method.Analyze; // #189：標記 Row2 已套用（保持按下）
                 if (web && _currentVideoId is not null)
                 {
+                    // #189：把 🌐 Script 找到之**逐字稿原文＋來源存入該片參考檔**（供檢視、免重找）
+                    if (!string.IsNullOrWhiteSpace(result.Transcript)) { _subs.SaveWebTranscript(_currentVideoId, result.Transcript, result.TranscriptSource); }
                     // #189：登記本片網路字幕有無——無逐字稿時 enricher 回全 null（見 OpenAiWebSpeakerEnricher）；有任一具名即視為 found。下次據此閘控 🌐 Script。
-                    _statusStore.SaveWeb(_currentVideoId, result.Speakers.Any(s => !string.IsNullOrWhiteSpace(s)), null);
+                    _statusStore.SaveWeb(_currentVideoId, result.Speakers.Any(s => !string.IsNullOrWhiteSpace(s)), result.TranscriptSource);
                 }
                 if (keepShown >= 0 && keepShown < _rows.Count) { ShowCue(keepShown); } // 重繪字幕帶（含新說話人前綴）
                 report(filled > 0

@@ -321,7 +321,12 @@
           </Grid.RowDefinitions>
           <Grid Grid.Row="0">
             <TextBlock Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
-            <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+              <!-- 開啟字幕資料夾（#189）：檔案總管開 %APPDATA%\LingoIsland\subtitles，供檢視歷次下載之字幕/逐字稿原文 -->
+              <Button x:Name="OpenFolderBtn" Content="&#x1F4C1;" Style="{StaticResource GhostButton}" Margin="0,0,6,0"
+                      ToolTip="Open the subtitle files folder (each video's subtitles &amp; web transcript are saved there)"/>
+              <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}"/>
+            </StackPanel>
           </Grid>
           <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
           <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"

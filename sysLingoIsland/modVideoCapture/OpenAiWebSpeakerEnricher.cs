@@ -84,7 +84,7 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
         }
 
         progress?.Report("Combining the aligned chunks…");
-        return new SpeakerEnrichResult(speakers, usages);
+        return new SpeakerEnrichResult(speakers, usages, found.Transcript, found.Source); // #189：一併回傳逐字稿原文＋來源，供存入該片參考檔
     }
 
     /// <summary>
