@@ -66,7 +66,7 @@ public class SubtitleYamlTests
         Assert.Equal(2, cues.Count);
         Assert.Equal("Marshall", cues[0].Speaker);
         Assert.Equal("I'm fired up!", cues[0].Text);
-        Assert.Equal(3.0, cues[0].StartSec, 3);
+        Assert.Equal(3.0, cues[0].StartSec!.Value, 3); // #184：StartSec 改 double?（全定時，取值不變）
         Assert.Null(cues[1].Speaker);           // 空白 speaker → null
         Assert.Equal("On the double.", cues[1].Text);
     }
@@ -113,5 +113,44 @@ public class SubtitleYamlTests
     {
         // 純量／對映非 cue 清單 → 轉型失敗擲 SubtitleException（不當機）
         Assert.Throws<SubtitleException>(() => SubtitleYaml.Parse("just a scalar, not a list"));
+    }
+
+    // ── 時間未知（StartSec null，#184 增量4）：null start 序列化省略/空、回讀為 null；排最後 ──
+
+    [Fact]
+    public void SerializeThenParse_UntimedCue_RoundTripsToNull()
+    {
+        // start 未知（null）：序列化→解析仍為 null（不變 0、不崩）；文字/說話人照常還原
+        var cues = new[] { new SubtitleCue("no time yet", (double?)null, "Ryder") };
+        var parsed = SubtitleYaml.Parse(SubtitleYaml.Serialize(cues));
+        Assert.Single(parsed);
+        Assert.Null(parsed[0].StartSec);
+        Assert.Equal("no time yet", parsed[0].Text);
+        Assert.Equal("Ryder", parsed[0].Speaker);
+    }
+
+    [Fact]
+    public void Parse_MissingOrEmptyStart_YieldsUntimed()
+    {
+        // 使用者手寫缺 start 鍵、或 start 值留空 → 時間未知（null），不誤為 0
+        var yaml = "- speaker: Ryder\n  text: no start key\n"
+                 + "- start:\n  text: empty start\n";
+        var cues = SubtitleYaml.Parse(yaml);
+        Assert.Equal(2, cues.Count);
+        Assert.All(cues, c => Assert.Null(c.StartSec));
+    }
+
+    [Fact]
+    public void Parse_UntimedSortsLast_TimedRemainAscending()
+    {
+        // 未定時句排最後、已定時句照舊升冪穩定排序
+        var yaml = "- text: no-time\n"                 // 未定時
+                 + "- start: 5\n  text: later\n"
+                 + "- start: 1\n  text: earlier\n";
+        var cues = SubtitleYaml.Parse(yaml);
+        Assert.Equal(new[] { "earlier", "later", "no-time" }, cues.Select(c => c.Text));
+        Assert.Equal(1.0, cues[0].StartSec!.Value, 3);
+        Assert.Equal(5.0, cues[1].StartSec!.Value, 3);
+        Assert.Null(cues[^1].StartSec);
     }
 }

@@ -149,7 +149,7 @@ public class PauseDeciderTests
     {
         // 修前 bug：指定說話人停在句末＝下一句起點→畫面落在下一位說話人。
         // 修後停在起點→暫停秒之 CueAt 正是目標句本身（畫面＝該說話人）。
-        var pausePoint = Spoken[2].StartSec;                                        // c(Ryder) 起點=5
+        var pausePoint = Spoken[2].StartSec!.Value;                                 // c(Ryder) 起點=5（#184：StartSec 改 double?）
         Assert.Equal(2, PauseDecider.NextPause(pausePoint, Spoken, 0, pauseSpeaker: "Ryder")); // 停在 c
         Assert.Equal(2, PauseDecider.CueAt(pausePoint, Spoken));                     // 畫面正是 c(Ryder)、非 d(Zuma)
     }
@@ -207,5 +207,57 @@ public class PauseDeciderTests
         Assert.True(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Ryder")); // noSpeaker=false 沿用 SpeakerMatches
         Assert.False(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Zuma"));
         Assert.True(PauseDecider.PauseMatches(null, noSpeaker: false, "anyone"));
+    }
+
+    // ── 時間未知（StartSec null，#184 增量4）：未定時句不列入時間判定，不崩不誤判 ──
+
+    // a(1) 定時、mid(null) 未定時、c(5) 定時：未定時句居中，驗容忍（現況產生器排最後，此為防禦性測試）
+    private static readonly List<SubtitleCue> WithUntimed = new()
+    {
+        new SubtitleCue("a", 1.0),
+        new SubtitleCue("mid", (double?)null),  // 時間未知
+        new SubtitleCue("c", 5.0),
+    };
+
+    [Fact]
+    public void NextPause_UntimedCue_NeverAPauseTarget_TimedStillPause()
+    {
+        // 已暫停 a(index 0)後：next=1 為未定時→跳過、落在 c(index 2)，暫停點＝c 起點+上限(5+8=13)。
+        // 未定時 mid(index 1) 絕不被回為暫停目標，且未被當 0 秒（否則會於 currentSec>=0 立即回 1）。
+        Assert.Equal(-1, PauseDecider.NextPause(0.0, WithUntimed, 0));   // 不於 0 秒對未定時句連環暫停
+        Assert.Equal(-1, PauseDecider.NextPause(12.9, WithUntimed, 0));  // c 暫停點(13)未到、mid 不算
+        Assert.Equal(2, PauseDecider.NextPause(13.0, WithUntimed, 0));   // 跳過 mid、於 c 起點+上限暫停
+    }
+
+    [Fact]
+    public void NextPause_TimedBeforeUntimed_CapsAtMaxRun_NotUntimedStart()
+    {
+        // a(1) 之後緊接未定時句→無已知句末，退回「起點+上限」(1+8=9) 暫停（不把未定時句當時間比較對象）。
+        Assert.Equal(-1, PauseDecider.NextPause(8.9, WithUntimed, -1));
+        Assert.Equal(0, PauseDecider.NextPause(9.0, WithUntimed, -1)); // a 於 1+8=9 暫停
+    }
+
+    [Fact]
+    public void NextPause_AllUntimed_ReturnsMinusOne()
+    {
+        var allNull = new List<SubtitleCue> { new("x", (double?)null), new("y", (double?)null) };
+        Assert.Equal(-1, PauseDecider.NextPause(0.0, allNull, -1));
+        Assert.Equal(-1, PauseDecider.NextPause(999.0, allNull, -1));
+    }
+
+    [Fact]
+    public void CueAt_UntimedCue_NotSelected_ScanContinuesToLaterTimed()
+    {
+        // 未定時 mid 不作為時間比較對象：不被選為當前句（currentSec=3 仍回 a，而非 mid），且不中斷掃描（能續看到 c）。
+        Assert.Equal(0, PauseDecider.CueAt(3.0, WithUntimed));  // mid 未被當 0 秒選中→仍是 a
+        Assert.Equal(0, PauseDecider.CueAt(4.9, WithUntimed));
+        Assert.Equal(2, PauseDecider.CueAt(6.0, WithUntimed));  // 掃描跨過 mid、選到 c（未中斷）
+    }
+
+    [Fact]
+    public void CueAt_AllUntimed_ReturnsMinusOne()
+    {
+        var allNull = new List<SubtitleCue> { new("x", (double?)null), new("y", (double?)null) };
+        Assert.Equal(-1, PauseDecider.CueAt(50.0, allNull));
     }
 }
