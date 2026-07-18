@@ -13,8 +13,8 @@
 - 字幕維持**字幕檔敘事序**（逐字稿為主之閱讀序）；對不到聲音之句時間留空（`StartSec` null，增量4 已合法化、不誤暫停、不打散閱讀序）。
 
 ### 內部
-- 新增 `ITranscriptAligner`／`OpenAiTranscriptAligner`（AI 整理＋對齊，沿用 `OpenAiWebSpeakerEnricher` find→align 骨架、語意反轉為「標時間」）、`TranscriptAlign`（去 HTML／提示組建／回應解析／組裝之純函式）、`TranscriptFetch`（取字幕檔內容）。`LoadVideoAsync` 改走新管線；移除 `_isAuto` 欄位與 Auto/Manual 顯示。
-- 純函式以假 Responses JSON 全測；單元測試 646 綠（+27 增量5′ 純函式情境）。真 Whisper／AI 端對端 smoke 見 README 證據。
+- 新增 `ITranscriptAligner`／`OpenAiTranscriptAligner`（AI 整理＋對齊，沿用 `OpenAiWebSpeakerEnricher` find→align 骨架、語意反轉為「標時間」；暫態 500/429/逾時退避重試、輸出截斷偵測 `IsTruncated`）、`TranscriptAlign`（去 HTML／提示組建／回應解析／組裝／截斷偵測之純函式）、`TranscriptFetch`（以 **curl 子行程**取字幕檔——Fandom/Cloudflare 以 TLS 指紋擋 `HttpClient`（即使帶完整瀏覽器標頭仍 403），curl 獲放行；curl 隨 Windows 10 1803+ 內建）。`LoadVideoAsync` 改走新管線；移除 `_isAuto` 欄位與 Auto/Manual 顯示。
+- 純函式以假 Responses JSON 全測；單元測試 651 綠（+32 增量5′ 純函式情境）。真 API 端對端 smoke（Pups and the Pirate Treasure）通過：AI 整理 406 句含精準說話人、Whisper 轉 23 分鐘、逐句對齊 70%、單集實際約 US$0.17（見 README 證據）。
 
 ## [3.1.1] - 2026-07-18
 

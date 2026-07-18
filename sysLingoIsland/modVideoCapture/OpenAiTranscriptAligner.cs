@@ -155,31 +155,45 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         },
     };
 
-    /// <summary>POST <c>/v1/responses</c>，回 (原始 json, 用量)；非 2xx／逾時／連線錯轉可讀失敗；使用者取消傳遞。（結構沿用 <see cref="OpenAiWebSpeakerEnricher"/>。）</summary>
+    private const int MaxAttempts = 3; // 暫態失敗（500/502/503/504／429／逾時／連線）退避重試——大請求偶發 500 多為暫態（增量5′ smoke 實測）
+
+    /// <summary>POST <c>/v1/responses</c>，回 (原始 json, 用量)；暫態失敗退避重試，非暫態非 2xx／逾時／連線錯轉可讀失敗（含回應本文摘要供診斷）；使用者取消傳遞。</summary>
     private async Task<(string Json, SpeakerUsage Usage)> CallAsync(string key, object body, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
-        req.Headers.Add("Authorization", "Bearer " + key);
-        req.Content = JsonContent.Create(body);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));
-        HttpResponseMessage resp;
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            resp = await Http.SendAsync(req, cts.Token);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (OperationCanceledException) { throw new SpeakerEnrichException($"Subtitle organizing/aligning timed out ({_timeoutSec}s)."); }
-        catch (HttpRequestException ex) { throw new SpeakerEnrichException("Network error while organizing/aligning the subtitle file: " + ex.Message); }
-        using (resp)
-        {
-            var json = await resp.Content.ReadAsStringAsync(ct);
-            if (!resp.IsSuccessStatusCode)
+            ct.ThrowIfCancellationRequested();
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
+            req.Headers.Add("Authorization", "Bearer " + key);
+            req.Content = JsonContent.Create(body);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));
+            HttpResponseMessage resp;
+            try
             {
-                throw new SpeakerEnrichException($"OpenAI responded {(int)resp.StatusCode} while organizing/aligning the subtitle file.");
+                resp = await Http.SendAsync(req, cts.Token);
             }
-            var usage = SpeakerInference.ParseUsage(json) ?? new SpeakerUsage(0, 0, 0);
-            return (json, usage);
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException) when (attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; } // 逾時→退避重試
+            catch (OperationCanceledException) { throw new SpeakerEnrichException($"Subtitle organizing/aligning timed out ({_timeoutSec}s)."); }
+            catch (HttpRequestException) when (attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; }         // 連線錯→退避重試
+            catch (HttpRequestException ex) { throw new SpeakerEnrichException("Network error while organizing/aligning the subtitle file: " + ex.Message); }
+            using (resp)
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var code = (int)resp.StatusCode;
+                    if ((code == 429 || code >= 500) && attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; } // 429／5xx＝暫態→退避重試
+                    throw new SpeakerEnrichException($"OpenAI responded {code} while organizing/aligning the subtitle file: " + Truncate(json, 300));
+                }
+                var usage = SpeakerInference.ParseUsage(json) ?? new SpeakerUsage(0, 0, 0);
+                return (json, usage);
+            }
         }
     }
+
+    private static Task BackoffAsync(int attempt, CancellationToken ct) => Task.Delay(TimeSpan.FromSeconds(1.5 * attempt), ct);
+
+    private static string Truncate(string s, int n) => string.IsNullOrEmpty(s) || s.Length <= n ? (s ?? "") : s.Substring(0, n) + "…";
 }
