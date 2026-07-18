@@ -17,9 +17,9 @@ public class SubtitleParserTests
         var cues = SubtitleParser.Parse(vtt);
         Assert.Equal(2, cues.Count);
         Assert.Equal("Once upon a time", cues[0].Text);
-        Assert.Equal(1.0, cues[0].StartSec, 3);
+        Assert.Equal(1.0, cues[0].StartSec!.Value, 3); // #184：StartSec 改 double?（全定時，取值不變）
         Assert.Equal("You must venture beyond", cues[1].Text);
-        Assert.Equal(4.5, cues[1].StartSec, 3);
+        Assert.Equal(4.5, cues[1].StartSec!.Value, 3);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class SubtitleParserTests
         var vtt = "WEBVTT\n\n01:02:03.000 --> 01:02:05.000\nDeep in\n";
         var cues = SubtitleParser.Parse(vtt);
         Assert.Single(cues);
-        Assert.Equal(3723.0, cues[0].StartSec, 3); // 1h 2m 3s
+        Assert.Equal(3723.0, cues[0].StartSec!.Value, 3); // 1h 2m 3s（#184：StartSec 改 double?）
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class SubtitleParserTests
         var cues = SubtitleParser.Parse(vtt);
         Assert.Equal(2, cues.Count);
         Assert.Equal("the pups are ready to help", cues[0].Text);
-        Assert.Equal(1.0, cues[0].StartSec, 3); // 起點保留
+        Assert.Equal(1.0, cues[0].StartSec!.Value, 3); // 起點保留（#184：StartSec 改 double?）
         Assert.Equal("let's roll", cues[1].Text);
     }
 
@@ -201,7 +201,7 @@ public class SubtitleParserTests
         var r = SubtitleParser.CoalesceCues(cues);
         Assert.Equal(2, r.Count);
         Assert.Equal("the storm blew over almost all the bins.", r[0].Text);
-        Assert.Equal(1.0, r[0].StartSec, 3); // 保留首 cue 起點（start-only：無 end）
+        Assert.Equal(1.0, r[0].StartSec!.Value, 3); // 保留首 cue 起點（start-only：無 end；#184：StartSec 改 double?）
         Assert.Equal("Ready?", r[1].Text);
     }
 

@@ -96,4 +96,28 @@ public class SubtitleRefineTests
         var cues = SubtitleRefine.BuildCues(Base(), segs);
         Assert.Equal(new[] { "earlier", "later" }, cues.Select(c => c.Text).ToArray());
     }
+
+    // ── 時間未知（StartSec null，#184 增量4）：原格未定時→該段亦未定時、排最後；已定時段序不變 ──
+
+    [Fact]
+    public void BuildCues_UntimedBaseCue_SegmentInheritsNull_SortsLast()
+    {
+        var baseCues = new[]
+        {
+            new SubtitleCue("The", 0.0),
+            new SubtitleCue("mystery", (double?)null), // 未定時原格
+            new SubtitleCue("It's", 5.0),
+        };
+        var segs = new[]
+        {
+            new RefinedSegment(1, "mystery line", "x"), // 沿用 base[1]＝null（未定時）
+            new RefinedSegment(2, "later", "y"),         // 5.0
+            new RefinedSegment(0, "earlier", "z"),       // 0.0
+        };
+        var cues = SubtitleRefine.BuildCues(baseCues, segs);
+        Assert.Equal(new[] { "earlier", "later", "mystery line" }, cues.Select(c => c.Text).ToArray());
+        Assert.Equal(0.0, cues[0].StartSec);       // 已定時段序不變、升冪
+        Assert.Equal(5.0, cues[1].StartSec);
+        Assert.Null(cues[^1].StartSec);             // 未定時段排最後
+    }
 }

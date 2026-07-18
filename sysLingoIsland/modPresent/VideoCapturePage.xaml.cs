@@ -1159,8 +1159,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private async Task ReplayCurrentAsync()
     {
         if (_shownCue < 0 || _shownCue >= _cues.Count || !_webReady) return;
+        if (_cues[_shownCue].StartSec is not double sec) return; // #184：未定時句無已知時間可跳，安全略過
         _lastPausedIndex = _shownCue - 1; // 允許重播後於本句結束再暫停
-        await SeekAsync(_cues[_shownCue].StartSec);
+        await SeekAsync(sec);
     }
 
     private async Task ResumeAsync()
@@ -1186,7 +1187,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (next >= _cues.Count) return;
         _lastPausedIndex = next - 1;
         ShowCue(next);
-        await SeekAsync(_cues[next].StartSec);
+        if (_cues[next].StartSec is double sec) await SeekAsync(sec); // #184：未定時句仍顯示，但無法 seek 定位
     }
 
     /// <summary>雙擊字幕句→**跳到該句起點、暫停並顯示該處畫面**（只定位不續播；之後按 ▶ Continue 才自該句起播、到句末暫停）。</summary>
@@ -1197,7 +1198,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (i < 0 || i >= _cues.Count) return;
         _lastPausedIndex = i - 1; // 之後 Continue＝自此句起點播、到句末暫停（不影響本次「只定位不播」）
         ShowCue(i);
-        await SeekPauseAsync(_cues[i].StartSec);
+        if (_cues[i].StartSec is double sec) await SeekPauseAsync(sec); // #184：未定時句仍顯示，但無法跳轉定位
     }
 
     /// <summary>跳到指定秒並播放（Replay／Next 用）。</summary>
@@ -1402,8 +1403,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         UpdateRefineButtons();            // #189：反映 Row3 已套用（✓）
     }
 
-    /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕末句開始時間為估（字幕大致涵蓋全片）；無字幕回 0。實際時長於轉錄時由 ffprobe 取得。</summary>
-    private double EstimateAudioSeconds() => _cues.Count > 0 ? _cues[^1].StartSec : 0;
+    /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕**最後一個有值**之開始時間為估（字幕大致涵蓋全片）；無字幕／皆未定時回 0。#184：容忍未定時句。實際時長於轉錄時由 ffprobe 取得。</summary>
+    private double EstimateAudioSeconds() => _cues.LastOrDefault(c => c.StartSec.HasValue)?.StartSec ?? 0;
 
     /// <summary>AI 動作跑前確認（#189）：顯示本次估算＋本日/本小時累計花費（本 app 記帳、非帳戶餘額）；按 OK 才執行、取消回 false＝不花費。</summary>
     private bool ConfirmAiRun(string title, string whatDescription, double estUsd)
@@ -1498,8 +1499,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public CueRow(int index, SubtitleCue cue) { Index = index; Cue = cue; }
         public int Index { get; }
         public SubtitleCue Cue { get; private set; }
-        /// <summary>時間標（#189）：cue 起始位置「m:ss」（超過一小時「h:mm:ss」）＋兩空白，置於說話人之前、清單以淡色 Run 呈現。</summary>
-        public string TimeLabel => FormatPos(Cue.StartSec) + "  ";
+        /// <summary>時間標（#189）：cue 起始位置「m:ss」（超過一小時「h:mm:ss」）＋兩空白，置於說話人之前、清單以淡色 Run 呈現。#184：未定時句（null）→ 無時間標（空字串）。</summary>
+        public string TimeLabel => Cue.StartSec is double s ? FormatPos(s) + "  " : "";
         /// <summary>說話人前綴（固定「名: 」;未知＝「unknown: 」,#189）——清單以粗體 Run 呈現。</summary>
         public string SpeakerLabel => SpeakerLabelOf(Cue.Speaker);
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>

@@ -28,7 +28,7 @@ public static class SubtitleYaml
         var rows = cues.Select(c => new CueYaml
         {
             Speaker = c.Speaker,
-            Start = Math.Round(c.StartSec, 3),
+            Start = c.StartSec.HasValue ? Math.Round(c.StartSec.Value, 3) : (double?)null, // #184：時間未知→null（序列化為空 start，回讀為 null）
             Text = c.Text,
         }).ToList();
         return Serializer.Serialize(rows);
@@ -36,6 +36,7 @@ public static class SubtitleYaml
 
     /// <summary>
     /// YAML 文件 → 逐句 cue（start-only #158）。空文字之項略過；未標示 speaker（空白）＝null。依起點排序。
+    /// #184：缺 <c>start</c> 鍵或其值為空＝時間未知（<see cref="SubtitleCue.StartSec"/> null）、排最後；含 start 之檔往返不變。
     /// YAML 語法錯誤擲 <see cref="SubtitleException"/>（含首行原因），供 UI 明訊、不中斷程式。
     /// </summary>
     public static IReadOnlyList<SubtitleCue> Parse(string? yaml)
@@ -64,10 +65,11 @@ public static class SubtitleYaml
             var text = (r.Text ?? "").Trim();
             if (text.Length == 0) continue; // 空文字略過
             var speaker = string.IsNullOrWhiteSpace(r.Speaker) ? null : r.Speaker.Trim();
-            cues.Add(new SubtitleCue(text, r.Start, speaker));
+            cues.Add(new SubtitleCue(text, r.Start, speaker)); // #184：缺 start／空值 → r.Start 為 null → 未定時句
         }
-        // 依起點穩定排序：PauseDecider（NextPause/CueAt）假定 StartSec 遞增；使用者於整檔 YAML 可能改動時序或重排
-        return cues.OrderBy(c => c.StartSec).ToList();
+        // 依起點穩定排序：PauseDecider（NextPause/CueAt）假定 StartSec 遞增；使用者於整檔 YAML 可能改動時序或重排。
+        // #184：未定時句（null）排最後、已定時句照舊升冪穩定排序（OrderBy 穩定，既有含 start 之檔序不變）。
+        return cues.OrderBy(c => c.StartSec ?? double.MaxValue).ToList();
     }
 
     private static string FirstLine(string s)
@@ -76,11 +78,11 @@ public static class SubtitleYaml
         return line.Length > 160 ? line[..160] + "…" : line;
     }
 
-    /// <summary>YAML 每項對映（camelCase 鍵）；Start 為秒（start-only #158，無 end）。</summary>
+    /// <summary>YAML 每項對映（camelCase 鍵）；Start 為秒（start-only #158，無 end）；#184：Start 可空（缺鍵／空值＝時間未知→null）。</summary>
     private sealed class CueYaml
     {
         public string? Speaker { get; set; }
-        public double Start { get; set; }
+        public double? Start { get; set; }
         public string? Text { get; set; }
     }
 }

@@ -114,8 +114,9 @@ public sealed class WhisperTranscriber : IAudioTranscriber
             {
                 throw new TranscribeException("Transcription returned no speech — the audio may be silent or non-English.");
             }
-            // 實際音訊秒數：ffprobe 取得優先；取不到退回最後一句時間（供實際費用估算）。
-            var audioSec = totalSec > 0 ? totalSec : (cues.Count > 0 ? cues[^1].StartSec : 0);
+            // 實際音訊秒數：ffprobe 取得優先；取不到退回**最後一個有值**之句時間（供實際費用估算）。
+            // #184：容忍未定時句（取最後有值者、皆無則 0）；Whisper 段本即全定時，行為不變。
+            var audioSec = totalSec > 0 ? totalSec : (cues.LastOrDefault(c => c.StartSec.HasValue)?.StartSec ?? 0);
             return new TranscribeResult(cues, audioSec);
         }
         finally
@@ -161,7 +162,8 @@ public sealed class WhisperTranscriber : IAudioTranscriber
                 cues.Add(new SubtitleCue(text, Math.Round(Math.Max(0, chunkStart + seg.Start), 3)));
             }
         }
-        return cues.OrderBy(c => c.StartSec).ToList();
+        // #184：未定時句（null）排最後、已定時句升冪穩定排序（Whisper 段全定時，序不變）。
+        return cues.OrderBy(c => c.StartSec ?? double.MaxValue).ToList();
     }
 
     /// <summary>解析 Whisper <c>verbose_json</c> 之 <c>segments</c> 陣列為 (start,end,text) 序列（純函式）；無 segments／格式毀損 → 空。</summary>

@@ -90,8 +90,9 @@ public static class SubtitleRefine
             var text = (s.Text ?? "").Trim();
             if (text.Length == 0) { continue; }
             var speaker = SpeakerInference.CleanSpeaker(s.Speaker);
-            result.Add(new SubtitleCue(text, baseCues[s.StartIndex].StartSec, speaker));
+            result.Add(new SubtitleCue(text, baseCues[s.StartIndex].StartSec, speaker)); // #184：沿用原格時間（原格未定時則此段亦未定時）
         }
-        return result.OrderBy(c => c.StartSec).ToList();
+        // #184：未定時句（null）排最後、已定時句照舊升冪穩定排序（既有全定時序不變）。
+        return result.OrderBy(c => c.StartSec ?? double.MaxValue).ToList();
     }
 }
