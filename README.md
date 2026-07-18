@@ -183,7 +183,7 @@
 ![影片頁「獲得」子頁（v3.1.0）：入口改「Load videos from a subtitle page」貼字幕檔網址；下方 Find up to N 找片上限＋Skip videos I already have](docs/manual-assets/video-acquire-subtitle-url.png)
 
 - **增量 5′〔字幕主線 pivot〕（#186，v3.2.0）**：字幕來源改為**字幕檔（含說話人）＋Whisper 聲音對齊**，**完全移除依賴 YouTube 內嵌字幕（auto/manual）**。載入一支影片時：讀取其字幕檔 → AI 整理成逐句（說話人＋台詞）→ 以 Whisper 轉錄影片實際語音取得時間軸 → AI 逐句把字幕檔台詞對齊到聲音時間 → 得到**帶說話人＋真實時間**的字幕。說話人來自字幕檔本身（非 AI 臆測、非 YouTube 字幕）、時間來自真實發音（不再受 YouTube 自動字幕漂移影響）——**這正是本 app 差異化「比對說話人」的落地**。**首次載入才建立**（每支一次 Whisper＋AI，跑前確認費用，約 US$0.1–0.2／集），建立後存檔、重載免重花；來源顯示改「Subtitle file + Whisper timing」。此舉同時解除增量2「需 YouTube 字幕才能載入」之限制（灰螢幕卡死／找到卻 0 結果之根因）。
-  > **實測（Pups and the Pirate Treasure，真 API 端對端）**：貼 PAW Patrol Wiki 逐字稿網址 → 配到 YouTube 全集 → 載入建立字幕：AI 由字幕檔整理出 **406 句、說話人精準**（Cap'n Turbot／Ryder／Marshall…、導覽雜訊全濾）、Whisper 轉 **23 分鐘**實際語音、逐句對齊後 **285/406（70%）帶真實時間**（未對齊者多為 `(Sighing)`／`(squawking)` 等非口說音效句，正確留「時間未知」不誤暫停）。單集實際花費 **約 US$0.17（NT$5.3）**。說話人來自字幕檔（非臆測、非 YouTube），時間來自真實發音。
+  > **實測（Pups and the Pirate Treasure，真 API 端對端）**：貼 PAW Patrol Wiki 逐字稿網址 → 配到 YouTube 全集 → 載入建立字幕：AI 由字幕檔整理出 **316 句對白、說話人精準**（Cap'n Turbot／Ryder／Marshall…；導覽雜訊與純音效舞台指示如 `(Sighing)`／`(squawking)` 全濾、只留可學對白）、Whisper 轉 **23 分鐘**實際語音、逐句對齊後 **279/316（88%）帶真實時間**。**時間精度**：對齊採「AI 挑每句對應的**聲音段編號**、取該段 Whisper **精確時間**」（非 AI 估算秒數），實測各句與 YouTube 播放器字幕**誤差 &lt;1 秒**（「Come on…」50.0s vs 49.8s、「nice booby bird」69.0s vs 69.2s）。單集實際花費 **約 US$0.16（NT$5.2）**。說話人來自字幕檔（非臆測、非 YouTube），時間來自真實發音。
 
 - **後續增量**：輸入端 pivot——改為單一 AI 輸入框（影片網址＋字幕檔網址／可上傳字幕檔），移除 finder／搜尋結果表（增量 6′）；非影片頁介面繁中化（#179）；標題列顯示版號（詳 epic #178）。
 

@@ -58,7 +58,9 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         }
         var key = RequireKey();
 
-        var timeline = TranscriptAlign.RenderAudioTimeline(audioCues);
+        // 精度修：以「段編號」對齊——模型挑每句對應之聲音段編號，時間取該段之 Whisper **精確時間**（非模型估算，消除 ±數秒抖動）。
+        var segs = TranscriptAlign.UsableAudioSegments(audioCues);
+        var timeline = TranscriptAlign.RenderAudioTimeline(segs);
         var startSecs = new double?[lines.Count];
         var usages = new List<SpeakerUsage>();
         var chunkCount = (lines.Count + TranscriptAlign.ChunkSize - 1) / TranscriptAlign.ChunkSize;
@@ -70,7 +72,8 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
             progress?.Report($"Aligning lines {offset + 1}–{offset + chunk.Count} of {lines.Count} to the audio…");
             var (json, usage) = await CallAsync(key, BuildAlignRequest(timeline, chunk), ct);
             usages.Add(usage with { Model = _alignModel, WebSearch = false });
-            var times = TranscriptAlign.ParseTimes(json, chunk.Count);
+            var refs = TranscriptAlign.ParseRefs(json, chunk.Count);
+            var times = TranscriptAlign.MapRefsToTimes(refs, segs);
             for (var j = 0; j < chunk.Count && offset + j < startSecs.Length; j++)
             {
                 startSecs[offset + j] = j < times.Count ? times[j] : null;
@@ -131,24 +134,24 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
 
     private object BuildAlignRequest(string timeline, IReadOnlyList<TranscriptLine> chunk) => new
     {
-        model = _alignModel, // 無 tools：不上網，只對照時間軸
+        model = _alignModel, // 無 tools：不上網，只對照已編號聲音段
         input = TranscriptAlign.BuildAlignPrompt(chunk, timeline),
-        max_output_tokens = chunk.Count * 12 + 400,
+        max_output_tokens = chunk.Count * 8 + 400,
         text = new
         {
             format = new
             {
                 type = "json_schema",
-                name = "line_times",
+                name = "line_refs",
                 strict = true,
                 schema = new
                 {
                     type = "object",
                     properties = new Dictionary<string, object>
                     {
-                        ["times"] = new { type = "array", items = new { type = "number" }, minItems = chunk.Count, maxItems = chunk.Count },
+                        ["refs"] = new { type = "array", items = new { type = "integer" }, minItems = chunk.Count, maxItems = chunk.Count },
                     },
-                    required = new[] { "times" },
+                    required = new[] { "refs" },
                     additionalProperties = false,
                 },
             },

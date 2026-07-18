@@ -14,7 +14,8 @@
 
 ### 內部
 - 新增 `ITranscriptAligner`／`OpenAiTranscriptAligner`（AI 整理＋對齊，沿用 `OpenAiWebSpeakerEnricher` find→align 骨架、語意反轉為「標時間」；暫態 500/429/逾時退避重試、輸出截斷偵測 `IsTruncated`）、`TranscriptAlign`（去 HTML／提示組建／回應解析／組裝／截斷偵測之純函式）、`TranscriptFetch`（以 **curl 子行程**取字幕檔——Fandom/Cloudflare 以 TLS 指紋擋 `HttpClient`（即使帶完整瀏覽器標頭仍 403），curl 獲放行；curl 隨 Windows 10 1803+ 內建）。`LoadVideoAsync` 改走新管線；移除 `_isAuto` 欄位與 Auto/Manual 顯示。
-- 純函式以假 Responses JSON 全測；單元測試 651 綠（+32 增量5′ 純函式情境）。真 API 端對端 smoke（Pups and the Pirate Treasure）通過：AI 整理 406 句含精準說話人、Whisper 轉 23 分鐘、逐句對齊 70%、單集實際約 US$0.17（見 README 證據）。
+- **對齊精度**：逐句對齊採「AI 挑每句對應之**聲音段編號**、取該段 Whisper 精確時間」（非 AI 估算秒數——消除 ±數秒抖動；實測與 YouTube 播放器字幕誤差 &lt;1s）；並過濾純音效／舞台指示句（`IsPureNonSpeech`：只留可學對白、去除時間反轉來源）。
+- 純函式以假 Responses JSON 全測；單元測試 664 綠（+45 增量5′ 純函式情境）。真 API 端對端 smoke（Pups and the Pirate Treasure）通過：316 句對白含精準說話人、Whisper 轉 23 分鐘、逐句對齊 88%、單集實際約 US$0.16（見 README 證據）。
 
 ## [3.1.1] - 2026-07-18
 

@@ -25,7 +25,7 @@ public class TranscriptAlignTests
 
     private static string LinesJson(params object[] lines) => JsonSerializer.Serialize(new { lines });
     private static object Line(string speaker, string text) => new { speaker, text };
-    private static string TimesJson(params object[] times) => JsonSerializer.Serialize(new { times });
+    private static string RefsJson(params object[] refs) => JsonSerializer.Serialize(new { refs });
 
     // ── StripToPlainText ─────────────────────────────────────────────────────
 
@@ -157,103 +157,143 @@ public class TranscriptAlignTests
         Assert.Empty(TranscriptAlign.ParseLines(Api("{lines: not-json")));
     }
 
+    [Fact]
+    public void ParseLines_DropsPureNonSpeechLines()
+    {
+        var json = Api(LinesJson(
+            Line("Cap'n Turbot", "(Sighing)"),                 // 純音效→丟
+            Line("Cap'n Turbot", "(Gasping) Bingo!"),          // 含台詞→留
+            Line("Blue-footed booby bird", "(Bird squawking)"),// 純音效→丟
+            Line("Ryder", "Ready, Marshall?")));               // 台詞→留
+        var lines = TranscriptAlign.ParseLines(json);
+        Assert.Equal(2, lines.Count);
+        Assert.Equal("(Gasping) Bingo!", lines[0].Text);
+        Assert.Equal("Ready, Marshall?", lines[1].Text);
+    }
+
+    // ── IsPureNonSpeech（精度修：純舞台指示／音效丟棄） ─────────────────────────
+
+    [Theory]
+    [InlineData("(Sighing)", true)]
+    [InlineData("(Bird squawking)", true)]
+    [InlineData("[music]", true)]
+    [InlineData("(Applause) (Cheering)", true)]
+    [InlineData("...", true)]
+    [InlineData("   ", true)]
+    [InlineData("", true)]
+    [InlineData(null, true)]
+    [InlineData("(Gasping) Bingo!", false)]
+    [InlineData("Ready, Marshall?", false)]
+    [InlineData("Chase is on the case!", false)]
+    [InlineData("(Ryder over comm) PAW Patrol, to the Lookout!", false)]
+    public void IsPureNonSpeech_DetectsStageDirections(string? text, bool expected)
+        => Assert.Equal(expected, TranscriptAlign.IsPureNonSpeech(text));
+
     // ── RenderAudioTimeline ──────────────────────────────────────────────────
 
     [Fact]
-    public void RenderAudioTimeline_FormatsSecondsAndText()
-    {
-        var cues = new List<SubtitleCue>
-        {
-            new("Hello there", 1.2),
-            new("General Kenobi", 3.4),
-        };
-        var timeline = TranscriptAlign.RenderAudioTimeline(cues);
-        Assert.Equal("[1.2] Hello there\n[3.4] General Kenobi", timeline);
-    }
-
-    [Fact]
-    public void RenderAudioTimeline_SkipsNullTimeAndEmptyText()
+    public void UsableAudioSegments_FiltersNullTimeAndEmptyText()
     {
         var cues = new List<SubtitleCue>
         {
             new("timed", 2.0),
-            new("no time", null),   // 未定時→略過
-            new("   ", 5.0),        // 空文字→略過
+            new("no time", null),   // 未定時→濾掉
+            new("   ", 5.0),        // 空文字→濾掉
+            new("later", 9.0),
         };
-        var timeline = TranscriptAlign.RenderAudioTimeline(cues);
-        Assert.Equal("[2.0] timed", timeline);
+        var segs = TranscriptAlign.UsableAudioSegments(cues);
+        Assert.Equal(2, segs.Count);
+        Assert.Equal("timed", segs[0].Text);
+        Assert.Equal("later", segs[1].Text);
+    }
+
+    [Fact]
+    public void RenderAudioTimeline_Numbers1Based_NoTimesShown()
+    {
+        var segs = new List<SubtitleCue> { new("come on", 49.8), new("bingo", 58.7) };
+        var timeline = TranscriptAlign.RenderAudioTimeline(segs);
+        Assert.Equal("[1] come on\n[2] bingo", timeline);
+        Assert.DoesNotContain("49.8", timeline); // 精度修：刻意不顯示秒數，模型只挑編號、不估時間
     }
 
     // ── BuildAlignPrompt ─────────────────────────────────────────────────────
 
     [Fact]
-    public void BuildAlignPrompt_IncludesTimeline_CountLinesAndRules()
+    public void BuildAlignPrompt_IncludesNumberedTimeline_CountRefsAndRules()
     {
         var chunk = new List<TranscriptLine> { new("Ryder", "To the Lookout"), new("Chase", "On the case") };
-        var p = TranscriptAlign.BuildAlignPrompt(chunk, "[1.0] to the lookout\n[3.0] on the case");
-        Assert.Contains("[1.0] to the lookout", p);   // 時間軸帶入
+        var p = TranscriptAlign.BuildAlignPrompt(chunk, "[1] to the lookout\n[2] on the case");
+        Assert.Contains("[1] to the lookout", p);      // 已編號聲音段帶入
         Assert.Contains("2", p);                       // 恰 N 句
         Assert.Contains("-1", p);                      // 對不到回 -1
         Assert.Contains("單調", p);                    // 單調不遞減
-        Assert.Contains("times", p);                   // 要求的 JSON 鍵
+        Assert.Contains("refs", p);                    // 要求的 JSON 鍵（改為段編號 refs）
+        Assert.Contains("編號", p);                    // 精度修：挑編號而非估時間
         Assert.Contains("1. To the Lookout", p);       // 編號台詞（用 text）
         Assert.Contains("2. On the case", p);
     }
 
-    // ── ParseTimes ───────────────────────────────────────────────────────────
+    // ── ParseRefs（段編號）＋ MapRefsToTimes（取 Whisper 精確時間，精度修） ─────
 
     [Fact]
-    public void ParseTimes_ParsesValues_NegativeBecomesNull()
+    public void ParseRefs_ParsesIndices_NonPositiveBecomesNull()
     {
-        var times = TranscriptAlign.ParseTimes(Api(TimesJson(1.5, -1, 3.25)), 3);
-        Assert.Equal(3, times.Count);
-        Assert.Equal(1.5, times[0]);
-        Assert.Null(times[1]);       // -1＝對不到→null
-        Assert.Equal(3.25, times[2]);
+        var refs = TranscriptAlign.ParseRefs(Api(RefsJson(2, -1, 5)), 3);
+        Assert.Equal(3, refs.Count);
+        Assert.Equal(2, refs[0]);
+        Assert.Null(refs[1]);       // -1＝對不到→null
+        Assert.Equal(5, refs[2]);
     }
 
     [Fact]
-    public void ParseTimes_ShorterThanExpected_PadsNull()
+    public void ParseRefs_ShorterThanExpected_PadsNull()
     {
-        var times = TranscriptAlign.ParseTimes(Api(TimesJson(1.5)), 3);
-        Assert.Equal(3, times.Count);
-        Assert.Equal(1.5, times[0]);
-        Assert.Null(times[1]);
-        Assert.Null(times[2]);
+        var refs = TranscriptAlign.ParseRefs(Api(RefsJson(2)), 3);
+        Assert.Equal(3, refs.Count);
+        Assert.Equal(2, refs[0]);
+        Assert.Null(refs[1]);
+        Assert.Null(refs[2]);
     }
 
     [Fact]
-    public void ParseTimes_LongerThanExpected_Truncates()
+    public void ParseRefs_LongerThanExpected_Truncates()
     {
-        var times = TranscriptAlign.ParseTimes(Api(TimesJson(1.0, 2.0, 3.0, 4.0)), 2);
-        Assert.Equal(2, times.Count);
-        Assert.Equal(1.0, times[0]);
-        Assert.Equal(2.0, times[1]);
+        var refs = TranscriptAlign.ParseRefs(Api(RefsJson(1, 2, 3, 4)), 2);
+        Assert.Equal(2, refs.Count);
+        Assert.Equal(1, refs[0]);
+        Assert.Equal(2, refs[1]);
     }
 
     [Fact]
-    public void ParseTimes_RoundsToThreeDecimals()
+    public void ParseRefs_ZeroOrMalformedOrMissing_Null()
     {
-        var times = TranscriptAlign.ParseTimes(Api(TimesJson(1.23456)), 1);
-        Assert.Equal(1.235, times[0]);
-    }
+        Assert.Null(TranscriptAlign.ParseRefs(Api(RefsJson(0)), 1)[0]); // 0＝非 1-based 有效編號→null
 
-    [Fact]
-    public void ParseTimes_MalformedOrMissing_ReturnsAllNullOfExpectedLength()
-    {
-        var missing = TranscriptAlign.ParseTimes(Api(JsonSerializer.Serialize(new { other = 1 })), 2);
+        var missing = TranscriptAlign.ParseRefs(Api(JsonSerializer.Serialize(new { other = 1 })), 2);
         Assert.Equal(2, missing.Count);
-        Assert.All(missing, t => Assert.Null(t));
+        Assert.All(missing, r => Assert.Null(r));
 
-        var malformed = TranscriptAlign.ParseTimes(Api("{times: oops"), 2);
+        var malformed = TranscriptAlign.ParseRefs(Api("{refs: oops"), 2);
         Assert.Equal(2, malformed.Count);
-        Assert.All(malformed, t => Assert.Null(t));
+        Assert.All(malformed, r => Assert.Null(r));
     }
 
     [Fact]
-    public void ParseTimes_ZeroExpected_ReturnsEmpty()
+    public void ParseRefs_ZeroExpected_ReturnsEmpty()
     {
-        Assert.Empty(TranscriptAlign.ParseTimes(Api(TimesJson(1.0)), 0));
+        Assert.Empty(TranscriptAlign.ParseRefs(Api(RefsJson(1)), 0));
+    }
+
+    [Fact]
+    public void MapRefsToTimes_UsesExactSegmentTime_OutOfRangeOrNull()
+    {
+        var segs = new List<SubtitleCue> { new("a", 49.8), new("b", 58.7), new("c", 60.0) };
+        var refs = new int?[] { 1, null, 3, 9 }; // 9 越界
+        var times = TranscriptAlign.MapRefsToTimes(refs, segs);
+        Assert.Equal(49.8, times[0]);   // 精確取段時間、非估算（精度＝Whisper 本身）
+        Assert.Null(times[1]);          // null→時間未知
+        Assert.Equal(60.0, times[2]);
+        Assert.Null(times[3]);          // 越界→null
     }
 
     // ── IsTruncated（審查修：偵測 Responses 輸出被上限截斷） ──────────────────
