@@ -137,8 +137,9 @@ public partial class App : System.Windows.Application
             webProbe,      // #177：網路字幕可用性探測（IWebTranscriptProbe）
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
-            new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 重轉字幕、修時間漂移（按鈕觸發、跑前確認費用）
-            new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec)); // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
+            new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 取時間軸（載入時建立字幕、按鈕重轉；跑前確認費用）
+            new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec), // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
+            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec)); // epic #178 增量5′：字幕檔整理（說話人＋台詞）＋逐句對齊 Whisper 聲音時間軸
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
         _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）

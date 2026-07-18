@@ -2,6 +2,20 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.2.0] - 2026-07-18
+
+影片功能大改（epic #178）增量5′〔字幕主線 pivot〕：字幕來源改為**字幕檔（含說話人）＋Whisper 聲音對齊**，完全移除 yt-dlp auto/manual 抓字幕（#186）。
+
+### 變更
+- **字幕唯一來源＝字幕檔＋Whisper 對齊**：載入影片時，取字幕檔內容 → AI 整理為逐句（說話人＋台詞）→ 以 Whisper 轉錄影片實際語音取得時間軸 → AI 逐句對齊字幕檔句至聲音時間 → 產生帶說話人＋時間之字幕。**說話人來自字幕檔本身**（非推斷、非 YouTube 字幕）、**時間來自真實發音**——本 app 差異化（比對說話人）的落地。
+- **移除 yt-dlp auto/manual 抓字幕**：不再依賴 YouTube 內嵌字幕（屬 Chrome 套件已有之 commodity；且「需 YouTube 字幕才可載入」正是灰螢幕卡死、「由字幕檔配片找到卻 0 結果」之根因）。連帶移除「由字幕檔配片」之「可載入（需 YouTube 字幕）」濾鏡——finder 定位到的影片直接全部列出。
+- **載入即建立、跑前確認費用**：首次載入一支影片才跑管線（每支一次 Whisper＋AI 解析／對齊，約 US$0.1–0.2／集），**跑前確認估算費用**；建立後存檔，重載同片免重花。已無 Auto／Manual 之分（來源顯示改「Subtitle file + Whisper timing」）。
+- 字幕維持**字幕檔敘事序**（逐字稿為主之閱讀序）；對不到聲音之句時間留空（`StartSec` null，增量4 已合法化、不誤暫停、不打散閱讀序）。
+
+### 內部
+- 新增 `ITranscriptAligner`／`OpenAiTranscriptAligner`（AI 整理＋對齊，沿用 `OpenAiWebSpeakerEnricher` find→align 骨架、語意反轉為「標時間」）、`TranscriptAlign`（去 HTML／提示組建／回應解析／組裝之純函式）、`TranscriptFetch`（取字幕檔內容）。`LoadVideoAsync` 改走新管線；移除 `_isAuto` 欄位與 Auto/Manual 顯示。
+- 純函式以假 Responses JSON 全測；單元測試 646 綠（+27 增量5′ 純函式情境）。真 Whisper／AI 端對端 smoke 見 README 證據。
+
 ## [3.1.1] - 2026-07-18
 
 影片功能大改（epic #178）增量4〔資料地基〕：字幕開始時間支援「時間未知」（#184）。
