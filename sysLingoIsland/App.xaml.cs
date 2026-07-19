@@ -133,8 +133,8 @@ public partial class App : System.Windows.Application
         _videoPage = new VideoCapturePage(_videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
-            new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 取時間軸（載入時建立字幕、按鈕重轉；跑前確認費用）
-            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec)); // epic #178 增量5′：字幕檔整理（說話人＋台詞）＋逐句對齊 Whisper 聲音時間軸
+            // epic #178 增量6′-B「時間 pivot」定案：字幕檔自帶時間＋說話人、免費直接解析載入；版面五花八門、免費解析讀不到時間時,以 AI 直接抽取（照網頁原有時間戳、非對齊/Whisper,故不亂序）。
+            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec));
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
         _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）

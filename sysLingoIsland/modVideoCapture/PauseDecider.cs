@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace LingoIsland.Video;
 
 /// <summary>
@@ -59,9 +61,24 @@ public static class PauseDecider
         return Math.Min(words * 0.36, 6.0);
     }
 
-    /// <summary>指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。</summary>
-    internal static bool SpeakerMatches(string? target, string? speaker) =>
-        string.IsNullOrEmpty(target) || string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase);
+    /// <summary>合唸說話人之連接詞（「Ryder <b>and</b> Marshall」「Chase <b>&amp;</b> Rubble」「A<b>,</b> B」「A<b>/</b>B」）——拆為個別名字用。</summary>
+    private static readonly Regex Conjunction = new(@"\s*(?:\band\b|&|,|/|\+)\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// 指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。
+    /// #189-pause（USR：選 Ryder 也要停合唸句）：整串相符,或 <paramref name="speaker"/> 以連接詞拆出的**任一名字**＝目標——
+    /// 選「Ryder」亦停在「Ryder and Marshall」「Ryder and Zuma」;多詞單名（「Cap'n Turbot」「Mama eagle」「Blue-footed booby bird」）
+    /// 不含連接詞→不誤拆、只整串相符。大小寫不敏感。
+    /// </summary>
+    internal static bool SpeakerMatches(string? target, string? speaker)
+    {
+        if (string.IsNullOrEmpty(target)) return true;                                     // 未指定＝全部符合
+        if (string.IsNullOrEmpty(speaker)) return false;
+        if (string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase)) return true; // 整串相符（含直接選合唸句本身）
+        foreach (var part in Conjunction.Split(speaker))                                    // 合唸句之某一名字＝目標（Ryder ∈「Ryder and Marshall」）
+            if (string.Equals(target, part.Trim(), StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     /// <summary>
     /// 暫停對象是否符合（#189）：<paramref name="noSpeaker"/>＝true 時只在**未標示說話人**（空/null）之句暫停；

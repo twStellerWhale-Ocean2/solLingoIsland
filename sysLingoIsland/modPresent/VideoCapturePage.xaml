@@ -224,34 +224,24 @@
                 <Grid.RowDefinitions>
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- ① 初始資料（#189）：字幕**來源**——僅顯示（不可操作，避免誤會可切換）。Manual＝人工字幕（時間+斷句皆準）、Auto＝自動字幕（時間準、斷句可能錯）；皆無講話人 -->
-                <Grid Grid.Row="0" Height="26">
+                <!-- 時間偏移（epic #178 增量6′-B「時間 pivot」）：整份字幕時間整體平移校正——取代原 🎙 Voice（Whisper 已移除）。
+                     字幕快→輸負（如 -00:05 使字幕延後對上發音）、慢→輸正；Enter 或按 Shift 套用、存回。來源說明已取消（反正都是字幕）。 -->
+                <Grid Grid.Row="0" Margin="0,2,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="&#x1F4AC;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="自影片來源獲得字幕（僅顯示來源）。"/>
-                  <TextBlock x:Name="BaseSourceText" Grid.Column="1" VerticalAlignment="Center" Foreground="#6D3A4D"
-                             FontSize="12.5" Margin="2,0,0,0"
-                             ToolTip="字幕來源：Manual＝人工字幕（最佳）、Auto＝自動字幕。這是本片實際取得的來源，僅供顯示。"/>
-                </Grid>
-                <!-- ② 精修時間（#189；#180 移除原「講話人／斷句」🌐Script/🧠AI 那列）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
-                <Grid Grid.Row="1" Margin="0,4,0,0">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="26"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="&#x23F1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="標示時間，若為 Auto 還增加修訂斷句。"/>
-                  <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
-                          IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
+                             ToolTip="Shift all subtitle times (＋ = later, − = earlier)."/>
+                  <TextBox x:Name="OffsetBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center" Padding="6,0" Text="00:00"
+                           IsEnabled="False" ToolTip="Time offset MM:SS (or seconds), signed. Positive = subtitles appear later, negative = earlier. Press Enter or Shift to apply to every line."/>
+                  <Button x:Name="OffsetApplyBtn" Grid.Column="2" Content="Shift" Width="60" Height="26" Margin="6,0,0,0"
+                          IsEnabled="False" ToolTip="Shift every subtitle line by the offset (saved)."/>
                 </Grid>
-                <!-- ③ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
-                <Grid Grid.Row="2" Margin="0,6,0,0">
+                <!-- 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
+                <Grid Grid.Row="1" Margin="0,6,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
