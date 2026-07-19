@@ -624,7 +624,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 建置／測試／部署指令（繼承 techStack；GATE 由此取建置/測試指令）。
 
-* [sysLingoIsland系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish sysLingoIsland -c Release -r win-x64 --self-contained -p:Version={VERSION} -o publish`（**不用** `PublishSingleFile`——Velopack 打包以目錄為單位、官方明示不需單檔；csproj 之 `IncludeNativeLibrariesForSelfExtract=true` 對非單檔發佈惰性無害、留置以保單檔路徑健康，Issue #49/#51）、**打包指令** `vpk pack --packId LingoIsland --packVersion {VERSION} --packDir publish --mainExe LingoIsland.exe`（`dotnet tool` `vpk`；產 `Setup.exe`／`Portable.zip`／`full.nupkg`〔有前版基準時另產 delta〕／`releases.win.json`）、**測試指令** `dotnet test`、**部署方法** GitHub Release 掛上述打包資產（即自動更新之更新源；新使用者跑 `Setup.exe`，既有安裝啟動時自動更新）。
+* [sysLingoIsland系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish sysLingoIsland -c Release -r win-x64 --self-contained -p:Version={VERSION} -o publish`（**不用** `PublishSingleFile`——Velopack 打包以目錄為單位、官方明示不需單檔；csproj 之 `IncludeNativeLibrariesForSelfExtract=true` 對非單檔發佈惰性無害、留置以保單檔路徑健康，Issue #49/#51）、**打包指令** `vpk pack --packId LingoIsland --packVersion {VERSION} --packDir publish --mainExe LingoIsland.exe --icon sysLingoIsland\assets\app.ico --outputDir Releases`（`dotnet tool` `vpk`；`--icon` 使 `Setup.exe` 及其開始功能表／桌面捷徑、解除安裝項皆帶**應用圖示**〔Issue #177：安裝檔須按業界常規帶圖示，非 Velopack 預設圖示；安裝後主程式 `LingoIsland.exe` 圖示另由 csproj `<ApplicationIcon>` 提供、兩者一致〕；產 `Setup.exe`／`Portable.zip`／`full.nupkg`〔有前版基準時另產 delta〕／`releases.win.json`；**publish＋pack 已固化於 `build\pack.ps1`**〔讀 VERSION、發佈、帶 `--icon` 打包〕）、**測試指令** `dotnet test`、**部署方法** GitHub Release 掛上述打包資產（即自動更新之更新源；新使用者跑 `Setup.exe`，既有安裝啟動時自動更新）。
 * **方案層**：於 Windows 11 實機以 Velopack 安裝版跑 intTest／e2eTest。
 
 ## D. 規格效益
