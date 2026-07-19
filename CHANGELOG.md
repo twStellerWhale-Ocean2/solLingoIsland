@@ -2,6 +2,14 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.5.1] - 2026-07-20
+
+### 修正
+- **安裝檔（`Setup.exe`）加上應用圖示**（#177）：`vpk pack` 補 `--icon sysLingoIsland\assets\app.ico`，使安裝檔及其建立之開始功能表／桌面捷徑、解除安裝項皆帶本應用圖示，按業界常規（此前為 Velopack 預設圖示）。安裝後主程式 `LingoIsland.exe` 之圖示原即由 csproj `<ApplicationIcon>` 提供，兩者一致。
+
+### 內部
+- 新增 `build\pack.ps1`：固化「讀 `VERSION` → `dotnet publish`（self-contained win-x64）→ `vpk pack`（帶 `--icon`）→ 輸出 `Releases\`」發佈流程，供發佈列車呼叫、避免手動漏帶旗標。design.md 打包指令同步補 `--icon`。
+
 ## [3.5.0] - 2026-07-20
 
 全 app 介面**繁體中文化**（#179，並補齊 epic #178 決策10 之影片頁繁中）：單向繁中、不導入 resx、就地改字串。介面殼由全英文改為全繁中。
