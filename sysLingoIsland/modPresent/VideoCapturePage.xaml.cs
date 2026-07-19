@@ -91,7 +91,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         AcqInputBox.TextChanged += (_, _) => AcqPlaceholder.Visibility =
             string.IsNullOrEmpty(AcqInputBox.Text) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         // 送出鍵（USR 回饋「按 Enter 沒反應」）：**Enter 直接送出**（符合舊單行框習慣；貼上是 Ctrl+V、不觸發 Enter，故不會誤送）；**Shift+Enter 才插入換行**。Ctrl+Enter 亦送出（Ctrl 不帶 Shift）。
-        AcqInputBox.KeyDown += (_, e) =>
+        // **必須用 PreviewKeyDown（穿隧）**：多行 TextBox（AcceptsReturn）於自身 KeyDown 類別處理即插入換行並標 Handled，冒泡 KeyDown 之實例處理器收不到／已太晚——須在穿隧階段搶先攔下才擋得住換行並改為送出。
+        AcqInputBox.PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0) { DoAcquireBuild(); e.Handled = true; }
         };
