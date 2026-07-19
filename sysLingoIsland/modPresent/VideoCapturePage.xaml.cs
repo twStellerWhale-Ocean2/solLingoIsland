@@ -1217,60 +1217,31 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     }
 
     /// <summary>
-    /// 依現用主題各色**描述**建每原子說話人之字型顏色（USR 修：以「主題某色描述是否包含該說話人名（不分大小寫）」為配對依據，取代原輪派——
-    /// 太寬鬆之問題根治）。命中之色（粉彩）加深提飽和為白底可讀之鮮明字色（<see cref="VividFontHex"/>）。無主題或無命中→不上色（預設深色）。
+    /// 依現用主題 12 色之**描述**建每原子說話人之字型顏色（#189-checklist USR）：以「主題某色描述是否包含該說話人名（不分大小寫）」為配對依據;
+    /// 命中即**直接用該色 hex** 當字型色（12 色已高飽和、白底可讀，使用者可自訂）。無主題或無命中→不上色（預設深色）。
     /// </summary>
     private void RebuildSpeakerColors()
     {
         _speakerColorHex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (CurrentTheme()?.ColorRules is not { Count: > 0 } rules) { return; }
+        var theme = CurrentTheme();
+        if (theme is null) { return; }
+        LingoIsland.Query.ThemeColors.Ensure(theme);
         foreach (var sc in _speakerChecks)
         {
             if (sc.IsEveryone || sc.IsNoSpeaker) { continue; }
-            foreach (var (name, hex) in NoteColors.Palette) // 依盤序,取第一個描述含此說話人名之色
+            foreach (var col in theme.Colors) // 依槽序,取第一個描述含此說話人名之色
             {
-                if (rules.TryGetValue(name, out var desc) && !string.IsNullOrWhiteSpace(desc)
-                    && desc.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(col.Description) && !string.IsNullOrWhiteSpace(col.Hex)
+                    && col.Description.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
                 {
-                    _speakerColorHex[sc.Name] = VividFontHex(hex);
+                    _speakerColorHex[sc.Name] = col.Hex.Trim();
                     break;
                 }
             }
         }
     }
 
-    /// <summary>把粉彩色 hex 轉為白底可讀之鮮明字型色（提飽和、壓亮度；#189-checklist USR：顏色用於字型色）。灰階色（近零飽和）維持深灰。</summary>
-    private static string VividFontHex(string pastelHex)
-    {
-        var c = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(pastelHex);
-        RgbToHsl(c.R, c.G, c.B, out var h, out var s, out var l);
-        s = Math.Min(1.0, Math.Max(s, 0.60)); // 提飽和（粉彩本低飽和）
-        l = 0.42;                              // 壓亮度→白底對比足
-        HslToRgb(h, s, l, out var r, out var g, out var b);
-        return $"#{r:X2}{g:X2}{b:X2}";
-    }
-
-    private static void RgbToHsl(byte R, byte G, byte B, out double h, out double s, out double l)
-    {
-        double r = R / 255.0, g = G / 255.0, b = B / 255.0;
-        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
-        l = (max + min) / 2.0;
-        if (d == 0) { h = 0; s = 0; return; }
-        s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
-        h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
-        h *= 60;
-    }
-
-    private static void HslToRgb(double h, double s, double l, out byte R, out byte G, out byte B)
-    {
-        double c = (1 - Math.Abs(2 * l - 1)) * s, x = c * (1 - Math.Abs((h / 60.0) % 2 - 1)), m = l - c / 2;
-        double r = 0, g = 0, b = 0;
-        if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
-        else if (h < 240) { g = x; b = c; } else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
-        R = (byte)Math.Round((r + m) * 255); G = (byte)Math.Round((g + m) * 255); B = (byte)Math.Round((b + m) * 255);
-    }
-
-    /// <summary>目前內容頁所選之主題（供自動配色取 ColorRules）；未指派→null。</summary>
+    /// <summary>目前內容頁所選之主題（供自動配色取 Colors）；未指派→null。</summary>
     private LingoIsland.Query.ThemeItem? CurrentTheme()
     {
         var id = ThemeFilter.PickedThemeId(VideoThemePicker);

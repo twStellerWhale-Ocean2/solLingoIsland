@@ -81,8 +81,8 @@
 
             <Border Grid.Row="6" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
               <StackPanel>
-                <TextBlock Text="Color rules (note background)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-                <TextBlock Text="If a line matches a box's description, use that color; none matches = white. Leave a color blank to disable it."
+                <TextBlock Text="Colours (12) — click a swatch to change it" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+                <TextBlock Text="Describe which speaker(s)/lines use each colour (e.g. a character name). Used for subtitle speaker text colour and for note background (auto-lightened). Blank = unused."
                            FontSize="11.5" Foreground="#9A6A82" Margin="0,2,0,6" TextWrapping="Wrap"/>
                 <StackPanel x:Name="ColorRulesPanel"/>
               </StackPanel>
