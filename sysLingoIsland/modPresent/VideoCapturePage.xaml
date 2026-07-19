@@ -134,13 +134,8 @@
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- 所屬主題（內容區塊上方；顯示/改指派目前影片之主題，#173）＋播放中影片超連結網址（#177） -->
+            <!-- 內容區塊上方：影片標題＋播放中網址（#177）；所屬主題選單已移至下方控制鈕列（USR：節省空間） -->
             <StackPanel Grid.Row="0" Margin="2,0,2,8">
-              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,6,0"/>
-                <ComboBox x:Name="VideoThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
-                          IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
-              </StackPanel>
               <!-- 影片標題（#187；#189 改唯讀 TextBox 使可選取／複製）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
               <TextBox x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
                        Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"
@@ -182,17 +177,29 @@
 
               <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
                       Margin="0,8,0,0" Padding="10" MinHeight="52">
-                <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33。點字查詞；右鍵複製整句（#189，字可點故以右鍵複製取代拖選） -->
-                <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
-                  <TextBlock.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
-                    </ContextMenu>
-                  </TextBlock.ContextMenu>
-                </TextBlock>
+                <!-- 字級/粗體由 SubtitleDisplaySettings 套用；文字色依說話人之主題色（RenderClickable，USR）。點字查詞；右鍵複製整句。播音鈕（USR）念當前英文句。 -->
+                <DockPanel>
+                  <Button x:Name="SpeakBandBtn" DockPanel.Dock="Right" Content="&#xE767;" FontFamily="Segoe MDL2 Assets"
+                          Width="30" Height="28" VerticalAlignment="Top" Margin="8,0,0,0" IsEnabled="False"
+                          Background="Transparent" BorderThickness="0" Foreground="#B0578D" Cursor="Hand" FontSize="15"
+                          ToolTip="Play this line (English)"/>
+                  <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
+                    <TextBlock.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
+                      </ContextMenu>
+                    </TextBlock.ContextMenu>
+                  </TextBlock>
+                </DockPanel>
               </Border>
 
               <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                <!-- 所屬主題（USR：自影片上方移來，節省空間）：顯示/改指派目前影片之主題（#173） -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,4">
+                  <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,4,0"/>
+                  <ComboBox x:Name="VideoThemePicker" MinWidth="130" Height="26" VerticalContentAlignment="Center"
+                            IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
+                </StackPanel>
                 <Button x:Name="ReplayBtn" Content="&#x23EE; Previous" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
                 <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
                 <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
@@ -295,8 +302,8 @@
                   </ListBox.ItemTemplate>
                 </ListBox>
 
-                <GridSplitter Grid.Row="1" Height="10" Margin="0,2" HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="#E8A9BE"
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="Transparent"
                               ToolTip="Drag to resize the speaker list"/>
 
                 <!-- 說話人勾選面板（Everyone＋各原子說話人；合唸句拆開去重）：字幕篩選/顯示與影片等待共用同一份勾選（#189-checklist USR） -->

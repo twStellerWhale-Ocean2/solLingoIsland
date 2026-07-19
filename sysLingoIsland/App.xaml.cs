@@ -134,7 +134,8 @@ public partial class App : System.Windows.Application
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
             // epic #178 增量6′-B「時間 pivot」定案：字幕檔自帶時間＋說話人、免費直接解析載入；版面五花八門、免費解析讀不到時間時,以 AI 直接抽取（照網頁原有時間戳、非對齊/Whisper,故不亂序）。
-            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec));
+            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec),
+            () => _speech); // 字幕帶播音（USR）：委派取現行語音服務
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
         _videoPage.AddSpeakerNotesRequested += AddSpeakerNotesToFolder; // 某說話人所有台詞原文→〔影片-說話人〕資料夾（免 AI，#189-checklist）

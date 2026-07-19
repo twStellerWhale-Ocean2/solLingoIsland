@@ -177,9 +177,15 @@ public partial class ThemeManagementPage : UserControl
         }
     }
 
-    public void Reload()
+    public void Reload() => Reload(preferActive: false);
+
+    /// <summary>
+    /// 重載主題清單。<paramref name="preferActive"/>＝true（切到本頁時，USR）：忽略上次選取、**預設選使用中主題**；
+    /// 否則（頁內操作後）保留原選取。無選取一律退回：使用中→（無使用中則）首則。
+    /// </summary>
+    public void Reload(bool preferActive)
     {
-        var keepId = _selected?.Id;
+        var keepId = preferActive ? null : _selected?.Id;
         _data = _store.Load();
         BuildList();
         if (_data.Items.Count == 0)
@@ -191,7 +197,7 @@ public partial class ThemeManagementPage : UserControl
         }
         EmptyHint.Visibility = Visibility.Collapsed;
         Editor.Visibility = Visibility.Visible;
-        SelectById(keepId ?? _data.Items[0].Id);
+        SelectById(keepId ?? ThemeStore.GetActive(_data)?.Id ?? _data.Items[0].Id);
     }
 
     private void BuildList()
@@ -252,7 +258,6 @@ public partial class ThemeManagementPage : UserControl
             return;
         }
         NameBox.Text = _selected.Name;
-        KeywordsBox.Text = _selected.Keywords;
         DescBox.Text = _selected.Text;
         StatusLine.Text = _selected.IsActive ? "This theme is active." : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
@@ -289,7 +294,6 @@ public partial class ThemeManagementPage : UserControl
     {
         if (_selected is null) { return; }
         ThemeStore.Rename(_data, _selected.Id, NameBox.Text);
-        ThemeStore.UpdateKeywords(_data, _selected.Id, KeywordsBox.Text);
         ThemeStore.UpdateText(_data, _selected.Id, DescBox.Text);
         if (_pending is not null)
         {

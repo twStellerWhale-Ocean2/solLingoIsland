@@ -24,6 +24,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _populatingVideoPicker;                           // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private readonly ITranscriptAligner _aligner;                  // 直接抽取（epic #178 增量6′-B「時間 pivot」）：免費解析讀不到時間之網頁,以 AI 逐句抽「時間＋說話人＋台詞」（時間照網頁原樣抄、非估算/對齊,故不亂序）；會用 API、跑前確認費用
+    private readonly Func<ISpeechService?> _speechProvider;         // 字幕帶播音（USR：影片下方字幕唸英文句）——委派取現行語音服務（設定換聲後仍取到新實例）
     private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188→增量6′）：獲得框存入字幕檔網址＋載入來源，載入未快取時取用建立字幕
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
@@ -77,13 +78,16 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>把某說話人所有台詞**原文**批次收藏至指定資料夾（#189-checklist USR；免 AI 翻譯）：參數＝(資料夾名, 台詞原文清單依 cue 序)。App 端寫入 NotesStore、toast 回報。</summary>
     public event Action<string, IReadOnlyList<string>>? AddSpeakerNotesRequested;
 
-    public VideoCapturePage(VideoStore videoStore, ThemeStore themes, SubtitleStore subtitles, ITranscriptAligner aligner)
+    public VideoCapturePage(VideoStore videoStore, ThemeStore themes, SubtitleStore subtitles, ITranscriptAligner aligner,
+        Func<ISpeechService?> speechProvider)
     {
         InitializeComponent();
         _videoStore = videoStore;
         _themes = themes;
         _subs = subtitles;
         _aligner = aligner;
+        _speechProvider = speechProvider;
+        SpeakBandBtn.Click += (_, _) => SpeakCurrentLine(); // 字幕帶播音（USR）
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
@@ -181,7 +185,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             PopulateVideoThemeFilter(); // 切回本頁重填篩選（反映主題增刪改，B）
             RefreshVideoList();
-            if (_rows.Count > 0) { RebuildSpeakerColors(); RefreshCueEmphasis(); } // USR：主題色描述於 Themes 頁改後,切回即更新字幕說話人字型色
+            if (_rows.Count > 0) { RefreshSpeakerColoring(); } // USR：主題色描述於 Themes 頁改後,切回即更新字幕說話人字型色（含字幕帶）
             if (_guiding && _webReady) { _poll.Start(); }
         }
     }
@@ -484,8 +488,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var name = id is null ? null : ThemeStore.Find(_themes.Load(), id)?.Name;
         _videoStore.UpdateTheme(_currentVideoItemId, id, name);
         RefreshVideoList(); // 反映清單主題名／篩選（目前片仍以 _currentVideoItemId 選中或落選）
-        RebuildSpeakerColors();  // 主題改變→重算說話人自動配色（#189-checklist）
-        RefreshCueEmphasis();    // 粗體+顏色模式立即反映新主題色
+        RefreshSpeakerColoring();  // 改指派主題→重算說話人字型色（清單＋字幕帶，#189-checklist）
+    }
+
+    /// <summary>重算說話人字型色並套用到清單與字幕帶（USR：字幕字型色跟主題連動）——主題改指派/切回本頁時呼叫。</summary>
+    private void RefreshSpeakerColoring()
+    {
+        RebuildSpeakerColors();
+        RefreshCueEmphasis();
+        if (_shownCue >= 0 && _shownCue < _cues.Count) { RenderClickable(_cues[_shownCue]); } // 字幕帶亦即時更新
     }
 
     private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)
@@ -940,11 +951,14 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void RenderClickable(SubtitleCue cue)
     {
         SubtitleBand.Inlines.Clear();
-        // 固定格式「說話人：內容」（#189）：說話人一律前置、粗體、非可點；未知標 unknown（不再有無說話人就不顯示的混亂）
+        // 字型色跟主題連動（USR）：該句說話人於主題有配對色→用該色;否則預設筆記色 #3A2C33。整句（說話人＋台詞）同色。
+        var hex = ColorForSpeaker(cue.Speaker);
+        var brush = hex is not null ? BrushOfHex(hex) : EntryTextBrush;
+        // 固定格式「說話人：內容」（#189）：說話人一律前置、粗體、非可點；未知標 unknown
         SubtitleBand.Inlines.Add(new Run(SpeakerLabelOf(cue.Speaker))
         {
-            FontWeight = System.Windows.FontWeights.Bold, // 說話人名稱標粗體（#字幕說話人標粗體）
-            Foreground = EntryTextBrush,                  // 與筆記條目同色
+            FontWeight = System.Windows.FontWeights.Bold,
+            Foreground = brush,
         });
         foreach (var tok in EnglishWordTokenizer.Tokenize(cue.Text))
         {
@@ -953,7 +967,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                 var word = tok.Text;
                 var link = new Hyperlink(new Run(word))
                 {
-                    Foreground = EntryTextBrush, // 字幕顏色比照筆記條目 #3A2C33（可點仍以游標手勢示意）
+                    Foreground = brush, // 字型色依說話人主題色（可點仍以游標手勢示意）
                     Cursor = System.Windows.Input.Cursors.Hand,
                     TextDecorations = null,
                 };
@@ -962,7 +976,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             }
             else
             {
-                SubtitleBand.Inlines.Add(new Run(tok.Text));
+                SubtitleBand.Inlines.Add(new Run(tok.Text) { Foreground = brush });
             }
         }
     }
@@ -1599,5 +1613,14 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         ResumeBtn.IsEnabled = enabled;
         NextBtn.IsEnabled = enabled;
         AddNoteBtn.IsEnabled = enabled;
+        SpeakBandBtn.IsEnabled = enabled; // 字幕帶播音（USR）
+    }
+
+    /// <summary>字幕帶播音（USR：影片下方字幕唸英文句）：以現行語音服務念當前句英文（en-US）；未就緒/無句則忽略。</summary>
+    private void SpeakCurrentLine()
+    {
+        if (_shownCue < 0 || _shownCue >= _cues.Count) { return; }
+        var text = _cues[_shownCue].Text;
+        if (!string.IsNullOrWhiteSpace(text)) { _speechProvider()?.Speak(text, "en-US"); }
     }
 }
