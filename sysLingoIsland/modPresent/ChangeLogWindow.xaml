@@ -1,7 +1,7 @@
 <Window x:Class="LingoIsland.Present.ChangeLogWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Change Log" Width="560" Height="620"
+        Title="更新紀錄" Width="560" Height="620"
         MinWidth="380" MinHeight="300"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         ResizeMode="CanResizeWithGrip"
@@ -14,13 +14,13 @@
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
-      <TextBlock Grid.Row="0" Text="Change Log" FontWeight="SemiBold"
+      <TextBlock Grid.Row="0" Text="更新紀錄" FontWeight="SemiBold"
                  Foreground="{StaticResource PinkText}" FontSize="15" Margin="0,0,0,8"/>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <TextBox x:Name="ChangeLogBox" IsReadOnly="True" BorderThickness="0" Background="Transparent"
                  TextWrapping="Wrap" FontSize="12" Foreground="#3A2C33" IsTabStop="False" Padding="0"/>
       </ScrollViewer>
-      <Button Grid.Row="2" x:Name="CloseBtn" Content="Close" Style="{StaticResource GhostButton}"
+      <Button Grid.Row="2" x:Name="CloseBtn" Content="關閉" Style="{StaticResource GhostButton}"
               HorizontalAlignment="Right" Margin="0,10,0,0"/>
     </Grid>
   </Border>

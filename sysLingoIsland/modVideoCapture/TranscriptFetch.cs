@@ -17,12 +17,12 @@ public static class TranscriptFetch
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            throw new SpeakerEnrichException("This video has no subtitle-file URL to read.");
+            throw new SpeakerEnrichException("此影片沒有可讀取的字幕檔網址。");
         }
         var u = url.Trim();
         if (!u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            throw new SpeakerEnrichException("The subtitle-file URL must start with http:// or https://.");
+            throw new SpeakerEnrichException("字幕檔網址必須以 http:// 或 https:// 開頭。");
         }
 
         var psi = new ProcessStartInfo
@@ -53,9 +53,9 @@ public static class TranscriptFetch
         try { p = Process.Start(psi); }
         catch (Exception ex)
         {
-            throw new SpeakerEnrichException("Could not start curl to read the subtitle-file URL (curl ships with Windows 10 1803+; ensure it is on PATH): " + ex.Message);
+            throw new SpeakerEnrichException("無法啟動 curl 讀取字幕檔網址（curl 隨 Windows 10 1803+ 內建，請確認已加入 PATH）：" + ex.Message);
         }
-        if (p is null) { throw new SpeakerEnrichException("Could not start curl to read the subtitle-file URL."); }
+        if (p is null) { throw new SpeakerEnrichException("無法啟動 curl 讀取字幕檔網址。"); }
 
         using (p)
         {
@@ -71,17 +71,17 @@ public static class TranscriptFetch
             {
                 try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
                 if (ct.IsCancellationRequested) { throw; }
-                throw new SpeakerEnrichException($"Reading the subtitle-file URL timed out ({TimeoutSec}s).");
+                throw new SpeakerEnrichException($"讀取字幕檔網址逾時（{TimeoutSec} 秒）。");
             }
             var body = await stdoutTask;
             var err = await stderrTask;
             if (p.ExitCode != 0)
             {
-                throw new SpeakerEnrichException($"Could not read the subtitle-file URL (curl exit {p.ExitCode}) — check the URL is reachable: " + FirstMeaningfulLine(err));
+                throw new SpeakerEnrichException($"無法讀取字幕檔網址（curl 離開碼 {p.ExitCode}）——請確認網址可連線：" + FirstMeaningfulLine(err));
             }
             if (string.IsNullOrWhiteSpace(body))
             {
-                throw new SpeakerEnrichException("The subtitle-file URL returned no content.");
+                throw new SpeakerEnrichException("字幕檔網址未回傳任何內容。");
             }
             return body;
         }
@@ -89,7 +89,7 @@ public static class TranscriptFetch
 
     private static string FirstMeaningfulLine(string s)
     {
-        var line = s.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "unknown error";
+        var line = s.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "未知錯誤";
         return line.Length > 200 ? line[..200] + "…" : line;
     }
 }

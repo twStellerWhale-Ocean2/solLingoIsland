@@ -105,7 +105,7 @@ public class SubtitleYamlTests
     {
         // 未閉合單引號＝YAML 掃描器錯誤
         var ex = Assert.Throws<SubtitleException>(() => SubtitleYaml.Parse("- text: 'unterminated\n"));
-        Assert.Contains("Invalid YAML", ex.Message);
+        Assert.Contains("YAML 格式錯誤", ex.Message);
     }
 
     [Fact]

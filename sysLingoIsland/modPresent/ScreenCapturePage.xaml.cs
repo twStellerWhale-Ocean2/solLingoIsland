@@ -110,8 +110,8 @@ public partial class ScreenCapturePage : UserControl
 
         var any = shown.Count > 0;
         ShotEmptyHint.Text = d.Items.Count == 0
-            ? "No screenshots yet. Capture a screen (button or hotkey) to save it here."
-            : "No screenshots for this theme."; // 有截圖但本 theme 無
+            ? "尚無截圖。擷取螢幕（按鈕或快捷鍵）即可儲存於此。"
+            : "此主題沒有截圖。"; // 有截圖但本 theme 無
         ShotEmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         if (!any)
         {
@@ -220,7 +220,7 @@ public partial class ScreenCapturePage : UserControl
     private void OnClearShots(object? sender, RoutedEventArgs e)
     {
         if (ShotList.Items.Count == 0) { return; }
-        if (MessageBox.Show("Delete all captured screenshots?", "Clear screenshots",
+        if (MessageBox.Show("刪除所有已擷取的截圖？", "清除截圖",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -262,7 +262,7 @@ public partial class ScreenCapturePage : UserControl
         }
         _listening = true;
         ListeningChanged?.Invoke(true); // 暫停全域熱鍵，避免監聽期間按現行鍵誤觸喚起（Issue #89）
-        HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
+        HotkeyStatus.Text = "請按下快捷鍵…（Esc 取消）";
         ChangeHotkeyBtn.IsEnabled = false;
         _listenWindow = System.Windows.Window.GetWindow(this);
         if (_listenWindow is not null)

@@ -51,7 +51,7 @@ public partial class App : System.Windows.Application
         _instanceGuard = SingleInstanceGuard.Acquire();
         if (!_instanceGuard.IsFirstInstance)
         {
-            System.Windows.MessageBox.Show("LingoIsland is already running (see the tray icon).", "LingoIsland");
+            System.Windows.MessageBox.Show("LingoIsland 已在執行中（請見系統匣圖示）。", "LingoIsland");
             Shutdown();
             return;
         }
@@ -78,15 +78,15 @@ public partial class App : System.Windows.Application
         _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Open Main Window", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("Dictionary", null, (_, _) => SummonResult()); // 喚出獨立字典視窗（顯示最近查詢；v1.0.1）
-        menu.Items.Add("Query History", null, (_, _) => OpenMain(MainTab.History));
-        menu.Items.Add("My Notes", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("Capture", null, (_, _) => OpenMain(MainTab.Capture)); // 系統匣「Capture」→螢幕截圖頁（epic #145 增量2）
-        menu.Items.Add("Options", null, (_, _) => OpenMain(MainTab.Options));
-        menu.Items.Add("About", null, (_, _) => OpenMain(MainTab.About));
+        menu.Items.Add("開啟主視窗", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("字典", null, (_, _) => SummonResult()); // 喚出獨立字典視窗（顯示最近查詢；v1.0.1）
+        menu.Items.Add("查詢歷史", null, (_, _) => OpenMain(MainTab.History));
+        menu.Items.Add("我的筆記", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("擷取", null, (_, _) => OpenMain(MainTab.Capture)); // 系統匣「Capture」→螢幕截圖頁（epic #145 增量2）
+        menu.Items.Add("選項", null, (_, _) => OpenMain(MainTab.Options));
+        menu.Items.Add("關於", null, (_, _) => OpenMain(MainTab.About));
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => ExitApp());
+        menu.Items.Add("結束", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => OpenMain(MainTab.Notes);
 
@@ -175,7 +175,7 @@ public partial class App : System.Windows.Application
         if (failed.Count > 0)
         {
             System.Windows.MessageBox.Show(
-                $"Failed to register hotkey(s) “{string.Join("”, “", failed)}” (they may be in use by another app). LingoIsland keeps running; you can change the hotkeys in Options.",
+                $"無法註冊快捷鍵「{string.Join("」、「", failed)}」（可能已被其他應用程式占用）。LingoIsland 仍會繼續執行；你可以在「選項」中變更快捷鍵。",
                 "LingoIsland");
         }
     }
@@ -223,7 +223,7 @@ public partial class App : System.Windows.Application
         try { File.WriteAllText(LogPath, DateTime.Now + "\n" + args.Exception); }
         catch { /* log 寫入失敗不致命 */ }
         System.Windows.MessageBox.Show(
-            "An error occurred (logged to " + LogPath + "):\n\n" + args.Exception.Message, "LingoIsland Error");
+            "發生錯誤（已記錄至 " + LogPath + "）：\n\n" + args.Exception.Message, "LingoIsland 錯誤");
         args.Handled = true;
     }
 
@@ -265,7 +265,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("Lookup error:\n" + ex.Message, "LingoIsland");
+            System.Windows.MessageBox.Show("查詢錯誤：\n" + ex.Message, "LingoIsland");
         }
         finally
         {
@@ -315,7 +315,7 @@ public partial class App : System.Windows.Application
         catch (QueryException ex)
         {
             _dictionaryWindow?.Page.WordLookupFailed(); // 清等待游標＋忙碌旗標
-            ToastNotifier.Show("Word lookup failed: " + ex.Message);
+            ToastNotifier.Show("單字查詢失敗：" + ex.Message);
         }
     }
 
@@ -344,7 +344,7 @@ public partial class App : System.Windows.Application
         }
         catch (QueryException ex)
         {
-            ToastNotifier.Show("Add to notes failed: " + ex.Message);
+            ToastNotifier.Show("加入筆記失敗：" + ex.Message);
         }
     }
 
@@ -355,21 +355,21 @@ public partial class App : System.Windows.Application
     private void AddSpeakerNotesToFolder(string folder, IReadOnlyList<string> lines)
     {
         var fresh = _notesStore.NewOriginals(lines); // 先去重,只譯尚未收錄者
-        if (fresh.Count == 0) { ToastNotifier.Show($"All lines already in notes “{folder}”."); return; }
+        if (fresh.Count == 0) { ToastNotifier.Show($"所有台詞皆已在筆記「{folder}」中。"); return; }
         var ok = System.Windows.MessageBox.Show(
-            $"Add {fresh.Count} line(s) to “{folder}”?\n\nEach line is translated with one AI query — {fresh.Count} queries total, using your OpenAI key. Continue?",
-            "Add speaker lines to notes", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
+            $"要將 {fresh.Count} 句台詞加入「{folder}」嗎？\n\n每句台詞會以一次 AI 查詢進行翻譯——共 {fresh.Count} 次查詢，將使用你的 OpenAI 金鑰。是否繼續？",
+            "將說話人台詞加入筆記", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
         if (ok != System.Windows.MessageBoxResult.OK) { return; }
 
         // 進度表單（USR）：AiActionWindow 逐句 report 進度、可 Cancel 中止；同一視窗模態呈現、其訊息迴圈續泵故 async 照跑。
         var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
         int added = 0, failed = 0;
-        AiActionWindow.RunAndShow(_main, $"Adding {fresh.Count} line(s) to “{folder}”", async (report, ct) =>
+        AiActionWindow.RunAndShow(_main, $"正在將 {fresh.Count} 句台詞加入「{folder}」", async (report, ct) =>
         {
             for (var i = 0; i < fresh.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                report($"Translating {i + 1}/{fresh.Count}: {Ellipsis(fresh[i], 42)}");
+                report($"翻譯中 {i + 1}/{fresh.Count}：{Ellipsis(fresh[i], 42)}");
                 try
                 {
                     var r = await query.QueryTextAsync(fresh[i], ct);
@@ -377,13 +377,13 @@ public partial class App : System.Windows.Application
                 }
                 catch (QueryException) { failed++; }
             }
-            report($"Done — added {added}" + (failed > 0 ? $", {failed} failed" : ""));
+            report($"完成——已加入 {added}" + (failed > 0 ? $"，{failed} 句失敗" : ""));
             return null; // 無 token 用量回傳→不顯費用（前置對話框已提醒）
         }, autoCloseOnSuccess: false, showCost: false);
 
         _notesPage?.Reload();
         _dictionaryWindow?.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName());
-        if (added > 0) { ToastNotifier.Show($"✓ Added {added} translated line(s) to “{folder}”" + (failed > 0 ? $" ({failed} failed)" : "")); }
+        if (added > 0) { ToastNotifier.Show($"✓ 已將 {added} 句翻譯後的台詞加入「{folder}」" + (failed > 0 ? $"（{failed} 句失敗）" : "")); }
     }
 
     private static string Ellipsis(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
@@ -409,7 +409,7 @@ public partial class App : System.Windows.Application
         }
         catch (QueryException ex)
         {
-            ToastNotifier.Show("Re-translate failed: " + ex.Message);
+            ToastNotifier.Show("重新翻譯失敗：" + ex.Message);
         }
         finally
         {
@@ -434,7 +434,7 @@ public partial class App : System.Windows.Application
         }
         catch (QueryException ex)
         {
-            ToastNotifier.Show("Re-translate failed: " + ex.Message);
+            ToastNotifier.Show("重新翻譯失敗：" + ex.Message);
         }
         finally
         {
@@ -454,7 +454,7 @@ public partial class App : System.Windows.Application
         catch (QueryException ex)
         {
             _dictionaryWindow?.Page.WordLookupFailed();
-            ToastNotifier.Show("Re-translate failed: " + ex.Message);
+            ToastNotifier.Show("重新翻譯失敗：" + ex.Message);
         }
     }
 
@@ -511,9 +511,9 @@ public partial class App : System.Windows.Application
         var folder = ResolveFolderName(req.FolderName);
         var msg = _notesStore.AddToNamedFolderAndSave(req.Result, folder, req.ColorHex, DateTimeOffset.Now) switch
         {
-            NoteAddResult.Added => folder == NotesStore.DefaultFolderName ? "✓ Added to My Notes" : $"✓ Added to “{folder}”",
-            NoteAddResult.AlreadyExists => "Already in Notes",
-            _ => "Nothing to save",
+            NoteAddResult.Added => folder == NotesStore.DefaultFolderName ? "✓ 已加入我的筆記" : $"✓ 已加入「{folder}」",
+            NoteAddResult.AlreadyExists => "已在筆記中",
+            _ => "沒有可儲存的內容",
         };
         ToastNotifier.Show(msg);
         _notesPage?.Reload();
@@ -553,7 +553,7 @@ public partial class App : System.Windows.Application
         var latest = _historyStore.Load().FirstOrDefault();
         if (latest is null)
         {
-            ToastNotifier.Show("No query result yet");
+            ToastNotifier.Show("尚無查詢結果");
             return;
         }
         ShowDetail(latest.ToResult());

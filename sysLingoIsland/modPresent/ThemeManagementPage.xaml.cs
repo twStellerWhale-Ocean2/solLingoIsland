@@ -99,7 +99,7 @@ public partial class ThemeManagementPage : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 8, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = "Click to change this colour",
+                ToolTip = "點按即可更改此顏色",
             };
             swatch.MouseLeftButtonUp += OnSwatchClick; // 點色票→取色器改色
             Grid.SetColumn(swatch, 0);
@@ -111,7 +111,7 @@ public partial class ThemeManagementPage : UserControl
                 Padding = new Thickness(5, 3, 5, 3),
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ToolTip = "Describe which speaker(s)/lines use this colour — e.g. a character name; blank = unused.",
+                ToolTip = "說明哪些說話人／字幕行使用此顏色——例：角色名稱；留空＝未使用。",
             };
             Grid.SetColumn(box, 1);
             grid.Children.Add(box);
@@ -166,14 +166,14 @@ public partial class ThemeManagementPage : UserControl
         try
         {
             var src = LoadImage(img);
-            if (src is null) { MessageBox.Show("Couldn’t read the image.", "Drop Image"); return; }
+            if (src is null) { MessageBox.Show("無法讀取圖片。", "拖曳圖片"); return; }
             _pending = ToPng(src);
             ShowPreview(FromBytes(_pending));
-            StatusLine.Text = "Image dropped. You can “Auto-explain from Image” or just “Save”.";
+            StatusLine.Text = "已拖入圖片。可「從圖片自動解釋」或直接「儲存」。";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Read failed: " + ex.Message, "Drop Image");
+            MessageBox.Show("讀取失敗：" + ex.Message, "拖曳圖片");
         }
     }
 
@@ -225,7 +225,7 @@ public partial class ThemeManagementPage : UserControl
         col.Children.Add(new TextBlock { Text = it.Name, FontSize = 13, Foreground = Brush("#3A2C33") });
         if (it.IsActive)
         {
-            col.Children.Add(new TextBlock { Text = "● Active", FontSize = 11, Foreground = Brush("#2E7D46") });
+            col.Children.Add(new TextBlock { Text = "● 使用中", FontSize = 11, Foreground = Brush("#2E7D46") });
         }
         sp.Children.Add(col);
         return sp;
@@ -259,7 +259,7 @@ public partial class ThemeManagementPage : UserControl
         }
         NameBox.Text = _selected.Name;
         DescBox.Text = _selected.Text;
-        StatusLine.Text = _selected.IsActive ? "This theme is active." : "";
+        StatusLine.Text = _selected.IsActive ? "此主題為使用中。" : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
         // 載入 12 色（色票色＋描述，#189-checklist）
         ThemeColors.Ensure(_selected);
@@ -313,7 +313,7 @@ public partial class ThemeManagementPage : UserControl
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
-        StatusLine.Text = "Saved.";
+        StatusLine.Text = "已儲存。";
     }
 
     private void OnSetActive(object? sender, RoutedEventArgs e)
@@ -323,14 +323,14 @@ public partial class ThemeManagementPage : UserControl
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
-        StatusLine.Text = "Set active; queries will use this theme.";
+        StatusLine.Text = "已設為使用中；查詢將使用此主題。";
     }
 
     /// <summary>刪除選取主題（#169：清單右鍵選單「Delete」或按 Delete 鍵；含確認）。</summary>
     private void DeleteSelectedTheme()
     {
         if (_selected is null) { return; }
-        if (MessageBox.Show($"Delete theme “{_selected.Name}”?", "Delete Theme",
+        if (MessageBox.Show($"刪除主題「{_selected.Name}」？", "刪除主題",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -348,30 +348,30 @@ public partial class ThemeManagementPage : UserControl
         var img = Clipboard.ContainsImage() ? Clipboard.GetImage() : null;
         if (img is null)
         {
-            MessageBox.Show("No image on the clipboard.", "Paste Image");
+            MessageBox.Show("剪貼簿上沒有圖片。", "貼上圖片");
             return;
         }
         _pending = ToPng(img);
         ShowPreview(FromBytes(_pending));
-        StatusLine.Text = "Image pasted. You can “Auto-explain from Image” or just “Save”.";
+        StatusLine.Text = "已貼上圖片。可「從圖片自動解釋」或直接「儲存」。";
     }
 
     private void OnUpload(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        var dlg = new OpenFileDialog { Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*" };
+        var dlg = new OpenFileDialog { Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*" };
         if (dlg.ShowDialog() != true) { return; }
         try
         {
             var src = LoadImage(dlg.FileName);
-            if (src is null) { MessageBox.Show("Couldn’t read the image.", "Upload File"); return; }
+            if (src is null) { MessageBox.Show("無法讀取圖片。", "上傳檔案"); return; }
             _pending = ToPng(src);
             ShowPreview(FromBytes(_pending));
-            StatusLine.Text = "Image loaded. You can “Auto-explain from Image” or just “Save”.";
+            StatusLine.Text = "已載入圖片。可「從圖片自動解釋」或直接「儲存」。";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Read failed: " + ex.Message, "Upload File");
+            MessageBox.Show("讀取失敗：" + ex.Message, "上傳檔案");
         }
     }
 
@@ -385,11 +385,11 @@ public partial class ThemeManagementPage : UserControl
         }
         if (bytes is null)
         {
-            MessageBox.Show("Please paste or upload an image first.", "Auto-explain from Image");
+            MessageBox.Show("請先貼上或上傳圖片。", "從圖片自動解釋");
             return;
         }
         DescribeBtn.IsEnabled = false;
-        StatusLine.Text = "AI is analyzing…";
+        StatusLine.Text = "AI 分析中…";
         try
         {
             var result = await _describe(bytes);
@@ -403,13 +403,13 @@ public partial class ThemeManagementPage : UserControl
                 filledName = true;
             }
             StatusLine.Text = filledName
-                ? $"Recognized “{result.Name.Trim()}” and filled in name and description. Edit if needed, then “Save”."
-                : "Description generated. Edit if needed, then “Save”.";
+                ? $"已辨識「{result.Name.Trim()}」並填入名稱與描述。可視需要編輯，再「儲存」。"
+                : "已產生描述。可視需要編輯，再「儲存」。";
         }
         catch (Exception ex)
         {
             StatusLine.Text = "";
-            MessageBox.Show("Image analysis failed: " + ex.Message, "Auto-explain from Image");
+            MessageBox.Show("圖片分析失敗：" + ex.Message, "從圖片自動解釋");
         }
         finally
         {

@@ -72,9 +72,9 @@ public partial class MainWindow : Window
         }
         // #125：兩選（OK/Cancel）改三選（Yes/No/Cancel）——存後離開／不存還原離開／取消留頁。
         var r = System.Windows.MessageBox.Show(
-            "You have unsaved changes in Options.\n\n" +
-            "Yes — save and leave\nNo — discard changes and leave\nCancel — stay on Options",
-            "Unsaved changes",
+            "選項頁有未儲存的變更。\n\n" +
+            "是 — 儲存並離開\n否 — 捨棄變更並離開\n取消 — 留在選項頁",
+            "未儲存的變更",
             MessageBoxButton.YesNoCancel,
             MessageBoxImage.Warning);
         switch (r)
@@ -121,7 +121,7 @@ public partial class MainWindow : Window
     /// <summary>設定儲存成功後於底部狀態列輕量閃示「Saved ✓」數秒（#125，取代原「Saved.」模態對話框）。</summary>
     public void FlashSaved()
     {
-        SavedFlashText.Text = "Saved ✓";
+        SavedFlashText.Text = "已儲存 ✓";
         SavedFlashText.Visibility = Visibility.Visible;
         _savedFlashTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         _savedFlashTimer.Stop();
@@ -145,7 +145,7 @@ public partial class MainWindow : Window
             CountSeparator.Visibility = Visibility.Collapsed;
             return;
         }
-        CountText.Text = count.Value + (count.Value == 1 ? " entry" : " entries");
+        CountText.Text = count.Value + (count.Value == 1 ? " 條" : " 條");
         CountText.Visibility = Visibility.Visible;
         CountSeparator.Visibility = Visibility.Visible;
     }

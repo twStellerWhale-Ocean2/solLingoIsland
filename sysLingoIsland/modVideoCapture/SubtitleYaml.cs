@@ -51,12 +51,12 @@ public static class SubtitleYaml
         }
         catch (YamlException ex)
         {
-            throw new SubtitleException("Invalid YAML: " + FirstLine(ex.Message));
+            throw new SubtitleException("YAML 格式錯誤：" + FirstLine(ex.Message));
         }
         catch (Exception ex)
         {
             // 使用者手打之非預期結構（根為對映、型別無法轉換等）——一律轉可讀失敗，供 UI 明訊、不成為未觀察 task 例外
-            throw new SubtitleException("Could not parse subtitle YAML: " + FirstLine(ex.Message));
+            throw new SubtitleException("無法解析字幕 YAML：" + FirstLine(ex.Message));
         }
         if (rows is null) return cues;
 
@@ -74,7 +74,7 @@ public static class SubtitleYaml
 
     private static string FirstLine(string s)
     {
-        var line = s.Replace("\r", "").Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "parse error";
+        var line = s.Replace("\r", "").Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "解析錯誤";
         return line.Length > 160 ? line[..160] + "…" : line;
     }
 

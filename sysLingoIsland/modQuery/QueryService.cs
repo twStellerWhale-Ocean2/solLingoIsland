@@ -50,7 +50,7 @@ public sealed class QueryService
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot query. Set the user environment variable and restart.");
+            throw new QueryException("未設定 OPENAI_API_KEY 環境變數，無法查詢。請設定使用者環境變數後重新啟動。");
         }
 
         var dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
@@ -68,7 +68,7 @@ public sealed class QueryService
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot explain image. Set the user environment variable and restart.");
+            throw new QueryException("未設定 OPENAI_API_KEY 環境變數，無法解釋圖片。請設定使用者環境變數後重新啟動。");
         }
         var dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
         var json = await RunWithRetryAsync(c => SendOnceAsync(BuildDescribePayload(dataUrl), key, c), ct);
@@ -85,7 +85,7 @@ public sealed class QueryService
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot query. Set the user environment variable and restart.");
+            throw new QueryException("未設定 OPENAI_API_KEY 環境變數，無法查詢。請設定使用者環境變數後重新啟動。");
         }
         var json = await RunWithRetryAsync(c => SendOnceAsync(BuildTextPayload(WordPrompt, word), key, c), ct);
         return Parse(json);
@@ -100,7 +100,7 @@ public sealed class QueryService
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot query. Set the user environment variable and restart.");
+            throw new QueryException("未設定 OPENAI_API_KEY 環境變數，無法查詢。請設定使用者環境變數後重新啟動。");
         }
         var json = await RunWithRetryAsync(c => SendOnceAsync(BuildTextPayload(TextPrompt, english), key, c), ct);
         return Parse(json);
@@ -165,8 +165,8 @@ public sealed class QueryService
                 {
                     throw new QueryException(
                         _maxRetries == 0
-                            ? $"Query failed: {ex.Message}"
-                            : $"Query failed after {_maxRetries} retries: {ex.Message}");
+                            ? $"查詢失敗：{ex.Message}"
+                            : $"查詢失敗，已重試 {_maxRetries} 次：{ex.Message}");
                 }
                 await backoff(i, ct); // 第 i 次失敗後退避 2^i 秒（1s、2s…）
             }
@@ -200,11 +200,11 @@ public sealed class QueryService
         }
         catch (OperationCanceledException)
         {
-            throw new TransientQueryException($"Query timed out ({_timeoutSec}s)");
+            throw new TransientQueryException($"查詢逾時（{_timeoutSec} 秒）");
         }
         catch (HttpRequestException ex)
         {
-            throw new TransientQueryException("Network connection lost: " + ex.Message);
+            throw new TransientQueryException("網路連線中斷：" + ex.Message);
         }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
@@ -213,9 +213,9 @@ public sealed class QueryService
             var code = (int)resp.StatusCode;
             if (IsTransientStatus(code))
             {
-                throw new TransientQueryException($"API transient error {code}: {Truncate(json, 120)}");
+                throw new TransientQueryException($"API 暫時性錯誤 {code}：{Truncate(json, 120)}");
             }
-            throw new QueryException($"API responded {code}: {Truncate(json, 200)}");
+            throw new QueryException($"API 回應 {code}：{Truncate(json, 200)}");
         }
 
         return json;
@@ -352,7 +352,7 @@ public sealed class QueryService
                 .GetString();
             if (string.IsNullOrWhiteSpace(content))
             {
-                throw new QueryException("API response was empty.");
+                throw new QueryException("API 回應為空。");
             }
 
             using var inner = JsonDocument.Parse(content);
@@ -361,7 +361,7 @@ public sealed class QueryService
                 || !r.TryGetProperty("phonetic", out var p)
                 || !r.TryGetProperty("translation", out var t))
             {
-                throw new QueryException("Malformed response: missing fields.");
+                throw new QueryException("回應格式錯誤：缺少欄位。");
             }
             // 智能配色（Issue #55；#189-checklist 改主題 hex）：color 欄選填,AI 回主題色 hex→調淡為白底可讀之筆記底色、非法/無則空
             var color = r.TryGetProperty("color", out var c) ? ColorMath.LightenForBackground(c.GetString()) : "";
@@ -373,7 +373,7 @@ public sealed class QueryService
         }
         catch (Exception ex)
         {
-            throw new QueryException("Failed to parse response (malformed): " + ex.Message);
+            throw new QueryException("回應解析失敗（格式錯誤）：" + ex.Message);
         }
     }
 
@@ -386,7 +386,7 @@ public sealed class QueryService
             var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
             if (string.IsNullOrWhiteSpace(content))
             {
-                throw new QueryException("Image explanation response was empty.");
+                throw new QueryException("圖片解釋回應為空。");
             }
             return content.Trim();
         }
@@ -396,7 +396,7 @@ public sealed class QueryService
         }
         catch (Exception ex)
         {
-            throw new QueryException("Failed to parse image explanation response: " + ex.Message);
+            throw new QueryException("圖片解釋回應解析失敗：" + ex.Message);
         }
     }
 

@@ -241,11 +241,11 @@ public partial class NotesPage : UserControl
     private ContextMenu MakeMenu(TreeViewItem item, NoteFolder f)
     {
         var menu = new ContextMenu();
-        var addSub = new MenuItem { Header = "New Subfolder" };
+        var addSub = new MenuItem { Header = "新增子資料夾" };
         addSub.Click += (_, _) => CreateFolder(f);
-        var rename = new MenuItem { Header = "Rename", InputGestureText = "F2" };
+        var rename = new MenuItem { Header = "更名", InputGestureText = "F2" };
         rename.Click += (_, _) => BeginRename(item);
-        var delete = new MenuItem { Header = "Delete", InputGestureText = "Del", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "刪除", InputGestureText = "Del", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => DeleteFolder(f);
         menu.Items.Add(addSub);
         menu.Items.Add(new Separator());
@@ -359,9 +359,9 @@ public partial class NotesPage : UserControl
     private void UpdateSortButtons(NoteFolder? f)
     {
         var s = f?.Sort ?? new FolderSort(); // 唯讀預設值、不共用可變實例（審查 NIT②）
-        SetSortBtn(AlphaSortBtn, "Abc", s.Mode == NoteSortMode.Alpha, s.AlphaAsc);
-        SetSortBtn(TimeSortBtn, "Date", s.Mode == NoteSortMode.Time, s.TimeAsc);
-        SetSortBtn(ManualSortBtn, "Custom", s.Mode == NoteSortMode.Manual, s.ManualAsc);
+        SetSortBtn(AlphaSortBtn, "字母", s.Mode == NoteSortMode.Alpha, s.AlphaAsc);
+        SetSortBtn(TimeSortBtn, "日期", s.Mode == NoteSortMode.Time, s.TimeAsc);
+        SetSortBtn(ManualSortBtn, "自訂", s.Mode == NoteSortMode.Manual, s.ManualAsc);
     }
 
     private void SetSortBtn(Button btn, string label, bool active, bool ascending)
@@ -379,8 +379,8 @@ public partial class NotesPage : UserControl
         {
             return;
         }
-        if (MessageBox.Show($"Clear pronunciation-practice records for all {f.Entries.Count} notes in “{f.Name}”? The notes themselves are kept — only the score boxes are reset.",
-                "Clear Practice", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (MessageBox.Show($"確定要清除「{f.Name}」中全部 {f.Entries.Count} 則筆記的發音練習紀錄嗎？筆記本身會保留——僅重設成績框。",
+                "清除練習紀錄", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
@@ -470,9 +470,9 @@ public partial class NotesPage : UserControl
     private void DeleteFolder(NoteFolder f)
     {
         var msg = (f.Entries.Count > 0 || f.Folders.Count > 0)
-            ? $"Delete folder “{f.Name}” with its subfolders and {f.Entries.Count} notes? This cannot be undone."
-            : $"Delete folder “{f.Name}”?";
-        if (MessageBox.Show(msg, "Delete Folder", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            ? $"確定要刪除資料夾「{f.Name}」及其子資料夾與 {f.Entries.Count} 則筆記嗎？此操作無法復原。"
+            : $"確定要刪除資料夾「{f.Name}」嗎？";
+        if (MessageBox.Show(msg, "刪除資料夾", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
@@ -620,7 +620,7 @@ public partial class NotesPage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(2, 3, 2, 3),
             Margin = new Thickness(2, 0, 8, 0),
-            ToolTip = "Drag to reorder / drag onto a folder to move",
+            ToolTip = "拖曳可重新排序／拖曳到資料夾可移動",
         };
         // #130：按下即擷取滑鼠——指標離開窄握把後仍收 PreviewMouseMove，直接往左橫移至左樹資料夾亦能起拖
         //（原先未擷取，往左一離開握把即收不到移動事件、門檻跨不過，須先上下拖曳才生效）。
@@ -632,7 +632,7 @@ public partial class NotesPage : UserControl
 
         var text = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(entry.Original) ? "(no content)" : entry.Original,
+            Text = string.IsNullOrWhiteSpace(entry.Original) ? "（無內容）" : entry.Original,
             FontSize = EntryDisplaySettings.FontSize, // #複查：選項頁「條目顯示」可調字級/粗體/換行
             FontWeight = EntryDisplaySettings.Bold ? System.Windows.FontWeights.SemiBold : System.Windows.FontWeights.Normal,
             Foreground = Brush("#3A2C33"),
@@ -654,7 +654,7 @@ public partial class NotesPage : UserControl
 
         // 行尾播音鈕（Issue #56）：最高頻動作一鍵可達，其餘（檢視/底色/刪除）仍走右鍵選單。
         // 圓鈕（RoundIcon）明示可按；Click 自處理、不冒泡至卡片（單擊播音不觸發雙擊檢視、不啟動拖曳）。
-        var playBtn = RoundButton("", "Play", fg: "#2F6FED", bg: "#EAF1FE", border: "#CFE0FB"); // MDL2 Play
+        var playBtn = RoundButton("", "播音", fg: "#2F6FED", bg: "#EAF1FE", border: "#CFE0FB"); // MDL2 Play
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         Grid.SetColumn(playBtn, 3);
         grid.Children.Add(playBtn);
@@ -667,7 +667,7 @@ public partial class NotesPage : UserControl
         scoreBox.ShowBest(entry.PracticeScore);
 
         var micBtn = RoundButton("", // MDL2 Microphone
-            "Hold to record, release to check pronunciation", fg: MicFg, bg: MicBg, border: MicBorder);
+            "按住錄音，放開即檢查發音", fg: MicFg, bg: MicBg, border: MicBorder);
         var cell = new PracticeCell { Entry = entry, Mic = micBtn, Box = scoreBox, Card = card };
         micBtn.Tag = cell;
         micBtn.PreviewMouseLeftButtonDown += OnMicDown;
@@ -682,7 +682,7 @@ public partial class NotesPage : UserControl
         card.Child = grid;
         card.Tag = entry;
         card.ContextMenu = MakeEntryMenu(entry, card);
-        card.ToolTip = "Double-click to view; right-click for color / delete"; // View 項移除後之可發現性提示（#106 §G）
+        card.ToolTip = "雙擊檢視；右鍵可設定底色／刪除"; // View 項移除後之可發現性提示（#106 §G）
         card.MouseLeftButtonDown += (_, e) =>
         {
             _selector.Select(card); // 單擊即選取（#110；不設 Handled——雙擊首擊選取、再擊開檢視）
@@ -754,7 +754,7 @@ public partial class NotesPage : UserControl
         }
         if (string.IsNullOrWhiteSpace(cell.Entry.Original))
         {
-            ToastNotifier.Show("Nothing to practice");
+            ToastNotifier.Show("沒有可練習的內容");
             return;
         }
         var rec = _recorderFactory();
@@ -764,9 +764,9 @@ public partial class NotesPage : UserControl
             (rec as IDisposable)?.Dispose();
             NotifyFail(cell, start switch
             {
-                RecordStart.NoDevice => "No microphone found",
-                RecordStart.PermissionDenied => "Allow microphone access in Windows Privacy settings",
-                _ => "Could not start recording",
+                RecordStart.NoDevice => "找不到麥克風",
+                RecordStart.PermissionDenied => "請在 Windows 隱私權設定中允許麥克風存取",
+                _ => "無法開始錄音",
             });
             return;
         }
@@ -827,11 +827,11 @@ public partial class NotesPage : UserControl
             RestoreBox(cell); // 太短/無音 → 成績框回前態（含 <MinRecordMs 之放開）
             if (tooShort)
             {
-                NotifyFail(cell, "Recording too short");
+                NotifyFail(cell, "錄音太短");
             }
             else
             {
-                NotifyFail(cell, "No audio to score.");
+                NotifyFail(cell, "沒有可評分的錄音。");
             }
             return;
         }
@@ -839,7 +839,7 @@ public partial class NotesPage : UserControl
         if (assessor is null)
         {
             RestoreBox(cell);
-            NotifyFail(cell, "Set your OpenAI key to score pronunciation");
+            NotifyFail(cell, "請設定 OpenAI 金鑰以評分發音");
             return;
         }
         _practiceBusy = true;
@@ -866,13 +866,13 @@ public partial class NotesPage : UserControl
             RestoreBox(cell);
             var offline = ex.Message.Contains("Network", StringComparison.OrdinalIgnoreCase)
                           || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
-            NotifyFail(cell, offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
+            NotifyFail(cell, offline ? "沒有網路——發音評分需要連線" : "評分失敗：" + ex.Message);
         }
         catch (Exception)
         {
             // 非預期例外（含 async void）→ 復原並提示，不使 UI 執行緒崩潰
             RestoreBox(cell);
-            NotifyFail(cell, "Scoring failed, please try again");
+            NotifyFail(cell, "評分失敗，請再試一次");
         }
         finally
         {
@@ -945,18 +945,18 @@ public partial class NotesPage : UserControl
 
         // 編輯原文（複查回饋：辨識有誤時校正、自動重譯更新中文）
         // 直接捕捉 card；MenuItem.Parent 對 ContextMenu 頂層項常回 null，不可靠。
-        var edit = new MenuItem { Header = "Edit text" };
+        var edit = new MenuItem { Header = "編輯文字" };
         edit.Click += (_, _) => BeginEntryEdit(card, entry);
         menu.Items.Add(edit);
         menu.Items.Add(new Separator());
 
-        menu.Items.Add(ColorItem(entry, "No Color", ""));
+        menu.Items.Add(ColorItem(entry, "無底色", ""));
         foreach (var (name, hex) in NoteColors.Palette) // 集中色盤（Issue #55）
         {
             menu.Items.Add(ColorItem(entry, name, hex));
         }
 
-        var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { NotesStore.RemoveEntry(_data, entry.Id); Persist(); };
 
         menu.Items.Add(new Separator());
@@ -979,14 +979,14 @@ public partial class NotesPage : UserControl
         };
         var save = new Button
         {
-            Content = "Save & re-translate", Padding = new Thickness(10, 4, 10, 4),
+            Content = "儲存並重新翻譯", Padding = new Thickness(10, 4, 10, 4),
             Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
             BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
         };
         save.Click += (_, _) => EntryEditRequested?.Invoke(entry.Id, box.Text); // App 重譯後 Reload 重建卡片
         var cancel = new Button
         {
-            Content = "Cancel", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
+            Content = "取消", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
             Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
             BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
         };
@@ -1006,7 +1006,7 @@ public partial class NotesPage : UserControl
     {
         var item = new MenuItem
         {
-            Header = name,
+            Header = NoteColors.DisplayName(name),
             IsCheckable = false,
             Icon = new Border
             {
@@ -1021,7 +1021,7 @@ public partial class NotesPage : UserControl
         if ((entry.Color ?? "") == hex)
         {
             item.FontWeight = System.Windows.FontWeights.SemiBold;
-            item.Header = name + "　✓"; // 目前色標記
+            item.Header = NoteColors.DisplayName(name) + "　✓"; // 目前色標記
         }
         item.Click += (_, _) =>
         {

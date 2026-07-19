@@ -49,11 +49,11 @@ public sealed class PronunciationService : IPronunciationAssessor
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new QueryException("OPENAI_API_KEY environment variable is not set; cannot score pronunciation.");
+            throw new QueryException("未設定 OPENAI_API_KEY 環境變數，無法進行發音評分。");
         }
         if (wavBytes is null || wavBytes.Length == 0)
         {
-            throw new QueryException("No audio to score.");
+            throw new QueryException("沒有可評分的錄音。");
         }
         var b64 = Convert.ToBase64String(wavBytes);
         string json;
@@ -87,8 +87,8 @@ public sealed class PronunciationService : IPronunciationAssessor
                 {
                     throw new QueryException(
                         _maxRetries == 0
-                            ? $"Pronunciation scoring failed: {ex.Message}"
-                            : $"Pronunciation scoring failed after {_maxRetries} retries: {ex.Message}");
+                            ? $"發音評分失敗：{ex.Message}"
+                            : $"發音評分失敗，已重試 {_maxRetries} 次：{ex.Message}");
                 }
                 await backoff(i, ct);
             }
@@ -118,11 +118,11 @@ public sealed class PronunciationService : IPronunciationAssessor
         }
         catch (OperationCanceledException)
         {
-            throw new TransientQueryException($"Scoring timed out ({_timeoutSec}s)");
+            throw new TransientQueryException($"評分逾時（{_timeoutSec} 秒）");
         }
         catch (HttpRequestException ex)
         {
-            throw new TransientQueryException("Network connection lost: " + ex.Message);
+            throw new TransientQueryException("網路連線中斷：" + ex.Message);
         }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
@@ -131,9 +131,9 @@ public sealed class PronunciationService : IPronunciationAssessor
             var code = (int)resp.StatusCode;
             if (QueryService.IsTransientStatus(code))
             {
-                throw new TransientQueryException($"API transient error {code}");
+                throw new TransientQueryException($"API 暫時性錯誤 {code}");
             }
-            throw new QueryException($"API responded {code}: {Truncate(json, 200)}");
+            throw new QueryException($"API 回應 {code}：{Truncate(json, 200)}");
         }
         return json;
     }
@@ -210,12 +210,12 @@ public sealed class PronunciationService : IPronunciationAssessor
             var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
             if (message.TryGetProperty("refusal", out var refusal) && !string.IsNullOrWhiteSpace(refusal.GetString()))
             {
-                throw new QueryException("Scoring request was refused.");
+                throw new QueryException("評分請求遭拒。");
             }
             var content = MessageContentText(message);
             if (string.IsNullOrWhiteSpace(content))
             {
-                throw new QueryException("Scoring response was empty.");
+                throw new QueryException("評分回應為空。");
             }
             var extracted = ExtractJsonObject(content);
             if (!extracted.TrimStart().StartsWith("{"))
@@ -224,16 +224,16 @@ public sealed class PronunciationService : IPronunciationAssessor
                 {
                     return new PronunciationResult(0, "未偵測到朗讀");
                 }
-                throw new QueryException("Malformed scoring response: no JSON object.");
+                throw new QueryException("評分回應格式錯誤：無 JSON 物件。");
             }
             using var inner = JsonDocument.Parse(extracted);
             var r = inner.RootElement;
             if (!r.TryGetProperty("score", out var s))
             {
-                throw new QueryException("Malformed scoring response: missing score.");
+                throw new QueryException("評分回應格式錯誤：缺少分數。");
             }
             var score = s.ValueKind == JsonValueKind.Number ? s.GetInt32()
-                : int.TryParse(s.GetString(), out var parsed) ? parsed : throw new QueryException("Score not a number.");
+                : int.TryParse(s.GetString(), out var parsed) ? parsed : throw new QueryException("分數非數字。");
             score = Math.Clamp(score, 0, 100);
             var note = r.TryGetProperty("note", out var n) ? (n.GetString() ?? "") : "";
             return new PronunciationResult(score, note.Trim());
@@ -244,7 +244,7 @@ public sealed class PronunciationService : IPronunciationAssessor
         }
         catch (Exception ex)
         {
-            throw new QueryException("Failed to parse scoring response (malformed): " + ex.Message);
+            throw new QueryException("評分回應解析失敗（格式錯誤）：" + ex.Message);
         }
     }
 

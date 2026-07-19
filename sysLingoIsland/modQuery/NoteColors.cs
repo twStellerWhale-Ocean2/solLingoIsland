@@ -25,6 +25,25 @@ public static class NoteColors
         ("Orange", "#FFD9B8"),
     };
 
+    /// <summary>
+    /// 盤上英文色名 → 繁中顯示名（Issue #179）：**僅供 UI 顯示**（筆記色選單、結果視窗色塊 tooltip）。
+    /// <see cref="Palette"/> 之英文名保留作為智能配色之色名↔hex 對應鍵（AI 回英文色名），故不改 Palette、只在呈現層轉譯。未知名回原字串。
+    /// </summary>
+    public static string DisplayName(string? name) => (name ?? "").Trim() switch
+    {
+        "Pink" => "粉紅",
+        "Blue" => "粉藍",
+        "Green" => "粉綠",
+        "Yellow" => "粉黃",
+        "Gray" => "淺灰",
+        "Violet" => "淡紫",
+        "Sky" => "天藍",
+        "Mint" => "薄荷",
+        "Lime" => "萊姆",
+        "Orange" => "淡橙",
+        var other => other,
+    };
+
     /// <summary>色名 → hex；未知名回空字串（＝無底色）。用於智能配色把 AI 回傳之色名對應到盤上色。</summary>
     public static string HexOfName(string? name)
     {

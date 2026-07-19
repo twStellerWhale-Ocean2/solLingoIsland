@@ -26,7 +26,7 @@ public partial class ChangeLogWindow : Window
             using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md");
             if (s is null)
             {
-                return "(No change log found)";
+                return "（找不到更新紀錄）";
             }
             using var r = new StreamReader(s);
             var text = r.ReadToEnd().TrimStart();
@@ -39,7 +39,7 @@ public partial class ChangeLogWindow : Window
         }
         catch
         {
-            return "(Couldn't load change log)";
+            return "（無法載入更新紀錄）";
         }
     }
 }

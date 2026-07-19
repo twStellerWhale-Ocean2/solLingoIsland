@@ -63,8 +63,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly HashSet<string> _checkedNames = new(StringComparer.OrdinalIgnoreCase); // 已勾之原子說話人（快取，供每句比對）
     private Dictionary<string, string> _speakerColorHex = new(StringComparer.OrdinalIgnoreCase); // 原子說話人→主題色 hex（無主題色則空）
 
-    private const string NoSpeaker = "(no speaker)";
-    private const string EveryoneSpeaker = "(all speakers)"; // 全選列（括號式，避與逐字稿真有「Everyone」說話人撞名；#189-checklist）
+    private const string NoSpeaker = "（無說話人）";
+    private const string EveryoneSpeaker = "（全部說話人）"; // 全選列（括號式，避與逐字稿真有「Everyone」說話人撞名；#189-checklist）
 
     private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
     private static readonly string PlayerCacheBust = Guid.NewGuid().ToString("N"); // 每次啟動唯一：WebView2 依 URL 快取 player.html，同名檔會餵**舊 JS**（改動/更新後不生效）——故 player.html 帶此唯一碼為檔名，保證載當前版本
@@ -222,7 +222,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         catch (Exception ex)
         {
             _webInit = null; // 允許下次 Load 再試（runtime 缺失多為永久，但暫時性錯誤可回復）
-            SetStatus("WebView2 runtime unavailable — install the Microsoft Edge WebView2 Runtime. (" + ex.Message + ")");
+            SetStatus("無法使用 WebView2——請安裝 Microsoft Edge WebView2 Runtime。(" + ex.Message + ")");
         }
     }
 
@@ -251,7 +251,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             var subtitleUrl = _statusStore.Get(id)?.TranscriptUrl;
             if (string.IsNullOrWhiteSpace(subtitleUrl))
             {
-                SetStatus("This video has no subtitle-file URL yet — add it under the Acquire tab.");
+                SetStatus("這支影片還沒有字幕檔網址——請於「獲得」子頁籤補上。");
                 if (listItemId is not null) { RefreshVideoList(); } // 審查修：還原清單選取到實際目前影片（提前 return 不錯位到未載入之片）
                 return;
             }
@@ -290,7 +290,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             IReadOnlyList<SubtitleCue> cues;
             if (cached is not null) // #174：用已存字幕（免費）
             {
-                SetStatus("Loading saved subtitles…");
+                SetStatus("載入已存字幕…");
                 cues = cached.Cues;
             }
             else // 首次：已於上方取檔＋解析＋摘要確認（fresh 必非空且含時間碼）→直接存檔載入
@@ -313,16 +313,16 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     RefreshVideoList();
                 }
                 // #186：不自動播放。就緒訊息延到 OnPoll 確認播放器 ready 才顯（避免可嵌入被禁/無效影片時謊報）。
-                SetStatus($"{_cues.Count} subtitle lines ready — loading player…");
+                SetStatus($"{_cues.Count} 句字幕已就緒——載入播放器中…");
             }
             else
             {
-                SetStatus($"{_cues.Count} subtitle lines loaded, but the player is unavailable (WebView2 runtime missing).");
+                SetStatus($"已載入 {_cues.Count} 句字幕，但播放器無法使用（缺少 WebView2 Runtime）。");
             }
         }
-        catch (OperationCanceledException) { SetStatus("Load canceled."); }
+        catch (OperationCanceledException) { SetStatus("已取消載入。"); }
         catch (SubtitleException ex) { SetStatus(ex.Message); }
-        catch (Exception ex) { SetStatus("Failed to load: " + ex.Message); }
+        catch (Exception ex) { SetStatus("載入失敗：" + ex.Message); }
         finally { SetLoading(false); }
     }
 
@@ -336,12 +336,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         string raw;
         try
         {
-            SetStatus("Reading the subtitle file…");
+            SetStatus("讀取字幕檔中…");
             raw = await TranscriptFetch.FetchAsync(subtitleUrl, CancellationToken.None);
         }
-        catch (OperationCanceledException) { SetStatus("Canceled."); return null; }
+        catch (OperationCanceledException) { SetStatus("已取消。"); return null; }
         catch (SubtitleException ex) { SetStatus(ex.Message); return null; }
-        catch (Exception ex) { SetStatus("Couldn't read the subtitle file: " + ex.Message); return null; }
+        catch (Exception ex) { SetStatus("無法讀取字幕檔：" + ex.Message); return null; }
 
         // (1) 免費解析：VTT/SRT（「-->」箭頭）→ fandom 式「HH:MM:SS 說話人： 台詞」→ 補抽 NAME: 說話人。抽到時間就直接用（免費、即時）。
         var parsed = SubtitleParser.Parse(raw);
@@ -350,30 +350,30 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         if (det.Any(c => c.StartSec.HasValue)) { return det; }
 
         // (2) 免費解析讀不到時間（五花八門的版面）→ 請 AI 讀整頁抽取（照網頁自己的時間戳,非猜/對齊）。花費、跑前確認。
-        if (!ConfirmAiExtract()) { SetStatus("Kept the current video — AI extraction canceled."); return null; }
+        if (!ConfirmAiExtract()) { SetStatus("已保留目前影片——已取消 AI 抽取。"); return null; }
         IReadOnlyList<SubtitleCue>? aiCues = null;
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Extract subtitles with AI",
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "以 AI 抽取字幕",
             async (report, ct) =>
             {
                 var progress = new System.Progress<string>(s => report(s));
                 var res = await _aligner.ExtractTimedCuesAsync(TranscriptAlign.StripToPlainText(raw), progress, ct);
                 if (res.Truncated)
                 {
-                    report("This page is too long to extract in one pass — try a shorter transcript page.");
+                    report("這個頁面太長，無法一次抽取完——請改用較短的逐字稿頁面。");
                     return TranscriptCost(res.Usages);
                 }
                 var extracted = SubtitleParser.ExtractInlineSpeakers(res.Cues);
                 if (!extracted.Any(c => c.StartSec.HasValue))
                 {
-                    report("The AI didn't find timestamps on this page — check the URL is a timed transcript.");
+                    report("AI 在這個頁面找不到時間戳——請確認此網址為帶時間的逐字稿。");
                     return TranscriptCost(res.Usages);
                 }
                 aiCues = extracted;
-                report($"Extracted {extracted.Count} line(s); {extracted.Count(c => c.StartSec.HasValue)} timed.");
+                report($"已抽取 {extracted.Count} 句；其中 {extracted.Count(c => c.StartSec.HasValue)} 句有時間。");
                 return TranscriptCost(res.Usages);
             },
             autoCloseOnSuccess: false, showCost: true);
-        if (aiCues is null) { SetStatus("Couldn't extract timed subtitles from that page — see the dialog."); return null; }
+        if (aiCues is null) { SetStatus("無法從該頁面抽取帶時間的字幕——請見對話視窗。"); return null; }
         return aiCues;
     }
 
@@ -393,7 +393,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var msg =
             $"字幕檔解析結果：\n\n{cues.Count} 句 · {timed} 句有時間 · 涵蓋 0:00–{FormatPos(lastSec)}\n{speakerLine}\n\n" +
             "確認這份字幕對得上這支影片,載入嗎？（載入免費；時間可到內容頁用偏移量微調）";
-        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Load subtitles",
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "載入字幕",
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
     }
 
@@ -410,7 +410,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             "估算費用：約 NT$1–3 一頁（僅一次；之後同片載入免費）。使用你的 OpenAI 金鑰。\n" +
             "帳戶餘額請於 platform.openai.com/usage 查看。\n\n" +
             "要用 AI 抽取嗎？";
-        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Extract subtitles with AI",
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "以 AI 抽取字幕",
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
     }
 
@@ -446,8 +446,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }
         VideoList.SelectionChanged += OnVideoSelect;
         VideoEmptyHint.Text = d.Items.Count == 0
-            ? "No videos yet. Add one under the Acquire tab."
-            : "No videos for this theme."; // 有影片但本 theme 無
+            ? "尚無影片。請於「獲得」子頁籤加入。"
+            : "此主題尚無影片。"; // 有影片但本 theme 無
         VideoEmptyHint.Visibility = shown.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
         UpdateVideoThemePicker(); // 與清單/標題/篩選同步：顯示目前影片之所屬主題（#173）
     }
@@ -563,12 +563,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var subtitleUrl = urls.FirstOrDefault(u => ExtractVideoId(u) is null);
         if (id is null)
         {
-            SetStatus("Add a YouTube video URL — for example https://www.youtube.com/watch?v=…");
+            SetStatus("請加上 YouTube 影片網址——例如 https://www.youtube.com/watch?v=…");
             return;
         }
         if (string.IsNullOrWhiteSpace(subtitleUrl))
         {
-            SetStatus("Add a subtitle-file URL too — a transcript page that names the speakers (for example a fandom transcript).");
+            SetStatus("也請加上字幕檔網址——一個標明說話人的逐字稿頁面（例如 fandom 逐字稿）。");
             return;
         }
         // 已有此片紀錄→先問覆寫重置或取消（增量6′-B）：覆寫＝清掉已存字幕強制重建；取消＝保留現有、不動作、不花費。
@@ -576,9 +576,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             var overwrite = System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
                 "這支影片已有字幕紀錄。要覆寫、重新建立嗎？（會重新花費建立；取消則保留現有紀錄）",
-                "Video already added",
+                "影片已加入",
                 System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
-            if (overwrite != System.Windows.MessageBoxResult.OK) { SetStatus("Kept the existing subtitles for this video."); return; }
+            if (overwrite != System.Windows.MessageBoxResult.OK) { SetStatus("已保留這支影片的現有字幕。"); return; }
             _subs.Remove(id); // 清已存字幕→LoadVideoAsync 走未快取（重建）
         }
         // 記字幕檔網址到該片：LoadVideoAsync 未快取時即取此建立字幕（快取還原與載入來源一致）。
@@ -606,7 +606,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private void OnOpenExternalLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
     {
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
-        catch (Exception ex) { SetStatus("Could not open link: " + ex.Message); }
+        catch (Exception ex) { SetStatus("無法開啟連結：" + ex.Message); }
         e.Handled = true;
     }
 
@@ -620,7 +620,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             Directory.CreateDirectory(dir);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dir) { UseShellExecute = true });
         }
-        catch (Exception ex) { SetStatus("Could not open the video folder: " + ex.Message); }
+        catch (Exception ex) { SetStatus("無法開啟影片資料夾：" + ex.Message); }
     }
 
     /// <summary>目前影片之最佳已知標題（供字幕存檔資料夾命名，#189）：優先起播後取得之實名，退清單標題，再退影片 ID；無影片回空。</summary>
@@ -668,7 +668,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private void OnClearVideos()
     {
         if (_videoStore.Load().Items.Count == 0) return;
-        if (System.Windows.MessageBox.Show("Remove all videos from the list?", "Clear videos",
+        if (System.Windows.MessageBox.Show("確定要從清單中移除所有影片嗎？", "清除影片",
                 System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.OK)
         {
             return;
@@ -695,7 +695,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         WatchUrlRow.Visibility = System.Windows.Visibility.Collapsed; // #177：無載入→隱藏超連結網址
         VideoTitleText.Visibility = System.Windows.Visibility.Collapsed; // #187：無載入→隱藏標題
         UpdateVideoThemePicker(); // _currentVideoItemId null → 停用
-        SetStatus("No video loaded. Find one by transcript under Acquire.");
+        SetStatus("尚未載入影片。請於「獲得」子頁籤以逐字稿加入影片。");
     }
 
     /// <summary>起播後自 YouTube 播放器取標題、回寫影片清單項（epic #145 增量4）。</summary>
@@ -757,7 +757,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             if (int.TryParse((errRaw ?? "").Trim('"'), out var err) && err >= 0)
             {
                 _guiding = false; _poll.Stop();
-                SetStatus($"This video can't be played here (YouTube error {err}) — it may be embedding-disabled or unavailable. Try another video.");
+                SetStatus($"這支影片無法在此播放（YouTube 錯誤 {err}）——可能已停用內嵌或無法使用。請改試其他影片。");
                 return;
             }
 
@@ -771,7 +771,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                 SubTabPlay.IsChecked = true;        // #178 增量6′-B USR：確認播放器就緒（載入成功）才切到內容頁——不先跳
                 _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：就緒後自播放器取標題回寫影片清單
                 ShowCue(0);                         // 顯示第一句＋啟用控制鈕（不自動播放）
-                SetStatus($"{_cues.Count} lines loaded — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused).");
+                SetStatus($"已載入 {_cues.Count} 句——按 ▶ 繼續 播放（每句會暫停），或雙擊某句跳至該處（暫停）。");
             }
 
             // 播放時字幕清單跟隨（#178 增量6′-B USR）：當前句隨播放時間前進即高亮＋捲動＋更新字幕帶（不只在暫停點）。
@@ -816,7 +816,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     /// <summary>把字幕句以逐字可點呈現（說話人前置粗體、非可點；單字＝Hyperlink→WordLookupRequested；分隔＝純文字），沿用 EnglishWordTokenizer。色比照筆記條目。</summary>
     /// <summary>固定字幕說話人前綴（#189）：「名: 」;未知（空/空白）一律標「unknown: 」。字幕帶與清單共用,格式一致、不再混亂。</summary>
     private static string SpeakerLabelOf(string? speaker) =>
-        (string.IsNullOrWhiteSpace(speaker) ? "unknown" : speaker) + ": ";
+        (string.IsNullOrWhiteSpace(speaker) ? "未知" : speaker) + ": ";
 
     /// <summary>字幕清單時間標（#189）：cue 起始秒→「m:ss」，超過一小時→「h:mm:ss」；負值視為 0。</summary>
     private static string FormatPos(double sec)
@@ -844,11 +844,11 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         var row = CueRowUnderMouse();
         if (row is null || _yamlEditing) { e.Handled = true; return; } // 無列/編修中→不顯選單
 
-        var copy = new System.Windows.Controls.MenuItem { Header = "Copy line" };
+        var copy = new System.Windows.Controls.MenuItem { Header = "複製此句" };
         copy.Click += (_, _) => TrySetClipboard(row.Cue.Text);
         cm.Items.Add(copy);
         cm.Items.Add(new System.Windows.Controls.Separator());
-        cm.Items.Add(new System.Windows.Controls.MenuItem { Header = "Set speaker", IsEnabled = false }); // 標題列（停用）
+        cm.Items.Add(new System.Windows.Controls.MenuItem { Header = "設定說話人", IsEnabled = false }); // 標題列（停用）
         foreach (var name in _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
                                   .Distinct(StringComparer.OrdinalIgnoreCase)
                                   .OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
@@ -864,12 +864,12 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         }
         var clear = new System.Windows.Controls.MenuItem
         {
-            Header = "  (unknown / clear)",
+            Header = "  （未知／清除）",
             IsChecked = string.IsNullOrEmpty(row.Cue.Speaker),
         };
         clear.Click += (_, _) => AssignSpeaker(row, null);
         cm.Items.Add(clear);
-        var neu = new System.Windows.Controls.MenuItem { Header = "  New speaker…" };
+        var neu = new System.Windows.Controls.MenuItem { Header = "  新增說話人…" };
         neu.Click += (_, _) => { var n = PromptSpeakerName(row.Cue.Speaker); if (n is not null) { AssignSpeaker(row, n); } };
         cm.Items.Add(neu);
     }
@@ -908,7 +908,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         PopulateSpeakerChecks();                                                    // 新說話人可能出現/消失→重建勾選面板（保留原勾選）＋同步配色
         RefreshFilterView();                                                        // 篩選/顯示依新說話人重整
         RefreshCueEmphasis();
-        SetStatus(clean is null ? $"Cleared speaker on line {i + 1}." : $"Set line {i + 1} speaker to “{clean}”.");
+        SetStatus(clean is null ? $"已清除第 {i + 1} 句的說話人。" : $"已將第 {i + 1} 句的說話人設為「{clean}」。");
     }
 
     /// <summary>「New speaker…」文字輸入（#189）：小型模態輸入框；取消回 null（呼叫端不動作）、OK 回輸入字（空白＝清除）。</summary>
@@ -916,7 +916,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         var win = new System.Windows.Window
         {
-            Title = "Speaker name",
+            Title = "說話人名稱",
             Width = 300,
             SizeToContent = System.Windows.SizeToContent.Height,
             WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
@@ -925,12 +925,12 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             ShowInTaskbar = false,
         };
         var panel = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(12) };
-        panel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Enter a speaker name:", Margin = new System.Windows.Thickness(0, 0, 0, 6) });
+        panel.Children.Add(new System.Windows.Controls.TextBlock { Text = "輸入說話人名稱：", Margin = new System.Windows.Thickness(0, 0, 0, 6) });
         var tb = new System.Windows.Controls.TextBox { Text = initial ?? "" };
         panel.Children.Add(tb);
         var btns = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new System.Windows.Thickness(0, 10, 0, 0) };
-        var ok = new System.Windows.Controls.Button { Content = "OK", Width = 68, IsDefault = true, Margin = new System.Windows.Thickness(0, 0, 6, 0) };
-        var cancel = new System.Windows.Controls.Button { Content = "Cancel", Width = 68, IsCancel = true };
+        var ok = new System.Windows.Controls.Button { Content = "確定", Width = 68, IsDefault = true, Margin = new System.Windows.Thickness(0, 0, 6, 0) };
+        var cancel = new System.Windows.Controls.Button { Content = "取消", Width = 68, IsCancel = true };
         string? result = null;
         ok.Click += (_, _) => { result = tb.Text; win.DialogResult = true; };
         btns.Children.Add(ok);
@@ -994,9 +994,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void OnAddSpeakerNotesClick(object sender, System.Windows.RoutedEventArgs e)
     {
         if ((sender as System.Windows.FrameworkElement)?.DataContext is not SpeakerCheck sc || sc.IsEveryone) { return; }
-        var label = sc.IsNoSpeaker ? "unknown" : sc.Name;              // 未標示列→資料夾名以 unknown 表示
+        var label = sc.IsNoSpeaker ? "未知" : sc.Name;              // 未標示列→資料夾名以 unknown 表示
         var lines = CuesForSpeaker(sc).ToList();
-        if (lines.Count == 0) { SetStatus($"No lines found for “{label}”."); return; }
+        if (lines.Count == 0) { SetStatus($"找不到「{label}」的任何台詞。"); return; }
         AddSpeakerNotesRequested?.Invoke(SpeakerNotesFolder(label), lines); // App 端去重→費用確認→逐句翻譯→toast 回報
     }
 
@@ -1335,8 +1335,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void ApplyOffset()
     {
         var secs = ParseOffsetSeconds(OffsetBox.Text);
-        if (secs is null) { SetStatus("Enter a time offset (MM:SS or seconds). Positive = subtitles later, negative = earlier — e.g. 00:03 or -00:05."); return; }
-        if (secs.Value == 0) { SetStatus("Offset is 0:00 — no change."); return; }
+        if (secs is null) { SetStatus("請輸入時間偏移（MM:SS 或秒數）。正＝字幕延後、負＝提前——例如 00:03 或 -00:05。"); return; }
+        if (secs.Value == 0) { SetStatus("偏移為 0:00——無變更。"); return; }
         if (ShiftAllBy(secs.Value)) { OffsetBox.Text = "00:00"; } // 歸零供下次再微調（框輸入路徑才歸零；±鈕不動框）
     }
 
@@ -1359,7 +1359,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private bool ShiftAllBy(double secs)
     {
         if (_cues.Count == 0 || _yamlEditing || _loading || _currentVideoId is null) { return false; }
-        if (!_cues.Any(c => c.StartSec.HasValue)) { SetStatus("These subtitles have no timing to shift."); return false; }
+        if (!_cues.Any(c => c.StartSec.HasValue)) { SetStatus("這份字幕沒有可位移的時間。"); return false; }
         // 逐句改時間＋存檔＋重繪需一兩秒→沙漏游標,免使用者混亂（USR）。首次偏移前保留原始時間檔（資料夾同時留原始與校正後兩檔，USR）。
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
         try
@@ -1372,8 +1372,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             if (_rows.Count > 0) { ShowCue(0); }
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
-        var dir = secs < 0 ? "earlier" : "later";
-        SetStatus($"Shifted all subtitles {Math.Abs(secs):0.##}s {dir}. Adjust again if needed.");
+        var dir = secs < 0 ? "提前" : "延後";
+        SetStatus($"已將全部字幕{dir} {Math.Abs(secs):0.##} 秒。如需要可再次調整。");
         return true;
     }
 
@@ -1423,7 +1423,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
         OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false; OffsetMinusBtn.IsEnabled = false; OffsetPlusBtn.IsEnabled = false; // 增量6′-B：YAML 編修期間停用時間偏移
-        SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
+        SetStatus("正在以 YAML 編輯字幕——可合併／拆分句子並設定說話人，完成後按「套用」。");
     }
 
     /// <summary>套用 YAML 編修：解析→取代字幕；解析失敗（含 YAML 語法錯）留在編修模式明訊。續從目前播放時間到句暫停。</summary>
@@ -1433,7 +1433,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         IReadOnlyList<SubtitleCue> parsed;
         try { parsed = SubtitleYaml.Parse(YamlBox.Text); }
         catch (SubtitleException ex) { SetStatus(ex.Message); return; } // 留在編修模式供修正
-        if (parsed.Count == 0) { SetStatus("No subtitle lines found in the YAML — fix and Apply, or Cancel."); return; }
+        if (parsed.Count == 0) { SetStatus("YAML 中找不到任何字幕句——請修正後按「套用」，或按「取消」。"); return; }
 
         ExitYamlEditUi();
         SetCues(parsed);
@@ -1445,7 +1445,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (at >= 0) ShowCue(at); else { _shownCue = -1; SubtitleBand.Inlines.Clear(); }
         _guiding = _webReady;
         if (_webReady && IsVisible) _poll.Start();
-        SetStatus($"{parsed.Count} lines after edit — playback pauses at each line; tap a word to look it up.");
+        SetStatus($"編修後共 {parsed.Count} 句——播放時每句會暫停；點按單字即可查詢。");
     }
 
     /// <summary>取消 YAML 編修：丟棄編輯內容、還原清單、恢復導引。</summary>

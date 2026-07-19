@@ -16,13 +16,13 @@
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <Grid Grid.Row="0">
-        <TextBlock Text="Themes" FontWeight="Bold" FontSize="13"
+        <TextBlock Text="主題" FontWeight="Bold" FontSize="13"
                    Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
-        <Button x:Name="AddBtn" Content="＋ New Theme" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
+        <Button x:Name="AddBtn" Content="＋ 新增主題" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
       </Grid>
       <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,6,0,0">
         <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Margin="4"
-                 HorizontalContentAlignment="Stretch" ToolTip="Right-click or press Delete to remove"/>
+                 HorizontalContentAlignment="Stretch" ToolTip="右鍵點按或按 Delete 鍵以移除"/>
       </Border>
     </Grid>
 
@@ -45,39 +45,39 @@
               <RowDefinition Height="Auto"/>  <!-- 動作鈕 -->
             </Grid.RowDefinitions>
 
-            <Button Grid.Row="0" x:Name="DescribeBtn" Content="🔎 Auto-explain from Image" Style="{StaticResource GhostButton}"
+            <Button Grid.Row="0" x:Name="DescribeBtn" Content="🔎 從圖片自動解釋" Style="{StaticResource GhostButton}"
                     HorizontalAlignment="Right" Margin="0,0,0,8"/>
 
             <Border Grid.Row="1" x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
               <StackPanel>
                 <Image x:Name="Preview" MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform" Margin="0,0,0,6"/>
-                <TextBlock x:Name="NoImageHint" Text="(No image yet; paste, upload, or drag an image file here)"
+                <TextBlock x:Name="NoImageHint" Text="（尚無圖片；可貼上、上傳或拖曳圖片檔至此）"
                            Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap"/>
                 <Grid Margin="0,6,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <Button x:Name="PasteBtn" Grid.Column="0" Content="Paste from Clipboard" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
-                  <Button x:Name="UploadBtn" Grid.Column="1" Content="Upload File" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
+                  <Button x:Name="PasteBtn" Grid.Column="0" Content="從剪貼簿貼上" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
+                  <Button x:Name="UploadBtn" Grid.Column="1" Content="上傳檔案" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
                 </Grid>
               </StackPanel>
             </Border>
 
             <StackPanel Grid.Row="2">
-              <TextBlock Text="Name" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBlock Text="名稱" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
               <TextBox x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
             </StackPanel>
 
-            <TextBlock Grid.Row="3" Text="Theme description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+            <TextBlock Grid.Row="3" Text="主題描述（作為查詢參考注入）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
             <TextBox Grid.Row="4" x:Name="DescBox" Padding="6" Margin="0,4,0,4" TextWrapping="Wrap"
                      AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
                      VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
 
             <Border Grid.Row="5" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
               <StackPanel>
-                <TextBlock Text="Colours (12) — click a swatch to change it" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-                <TextBlock Text="Describe which speaker(s)/lines use each colour (e.g. a character name). Used for subtitle speaker text colour and for note background (auto-lightened). Blank = unused."
+                <TextBlock Text="顏色（12）— 點按色票即可更改" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+                <TextBlock Text="說明哪些說話人／字幕行使用各顏色（例：角色名稱）。用於字幕說話人文字色與筆記底色（自動調亮）。留空＝未使用。"
                            FontSize="11.5" Foreground="#9A6A82" Margin="0,2,0,6" TextWrapping="Wrap"/>
                 <StackPanel x:Name="ColorRulesPanel"/>
               </StackPanel>
@@ -86,12 +86,12 @@
             <TextBlock Grid.Row="6" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
 
             <WrapPanel Grid.Row="7">
-              <Button x:Name="ActiveBtn" Content="Set Active" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
-              <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource GhostButton}"/>
+              <Button x:Name="ActiveBtn" Content="設為使用中" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
+              <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource GhostButton}"/>
             </WrapPanel>
           </Grid>
         </ScrollViewer>
-        <TextBlock x:Name="EmptyHint" Text="No themes yet. Click “+ New Theme” to create one; type text, or paste/upload a game screenshot for AI to auto-explain."
+        <TextBlock x:Name="EmptyHint" Text="尚無主題。點按「＋ 新增主題」建立；輸入文字，或貼上／上傳遊戲截圖讓 AI 自動解釋。"
                    Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                    TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
       </Grid>
