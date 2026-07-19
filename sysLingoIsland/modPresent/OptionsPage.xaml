@@ -9,14 +9,14 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="AI Recognition &amp; Translation (OpenAI)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="API Key (OPENAI_API_KEY)" FontSize="12.5" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0"/>
+          <TextBlock Text="AI 辨識與翻譯（OpenAI）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="API 金鑰（OPENAI_API_KEY）" FontSize="12.5" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0"/>
           <TextBlock x:Name="KeyStatus" Margin="0,2,0,4" Foreground="{StaticResource PinkSub}"/>
           <PasswordBox x:Name="KeyBox" Padding="6"/>
-          <TextBlock Text="Paste to update; leave blank to keep unchanged. Saved to your user environment variable, never written to the app or config files."
+          <TextBlock Text="貼上以更新；留空則保持不變。存於你的使用者環境變數，絕不寫入程式或設定檔。"
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,3,0,0"/>
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Query model (vision)" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="查詢模型（視覺）" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBox x:Name="QueryModelBox" Padding="6,4" MinWidth="200"/>
           </StackPanel>
@@ -25,23 +25,23 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Speech voice (Windows built-in)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="朗讀語音（Windows 內建）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
             <ComboBox x:Name="VoiceBox" MinWidth="260"/>
-            <Button x:Name="TestBtn" Content="Test Voice" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
+            <Button x:Name="TestBtn" Content="測試發音" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
           </StackPanel>
-          <TextBlock Text="Uses Windows voices installed on your system; works offline, no quota."
+          <TextBlock Text="使用系統已安裝的 Windows 語音；離線運作、無用量限制。"
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Pronunciation practice" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="In My Notes, hold the mic on a card to record and release to score; the score box turns green when your best score reaches the pass threshold."
+          <TextBlock Text="發音練習" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="在「我的筆記」中，按住卡片上的麥克風錄音、放開即評分；當你的最佳分數達到及格門檻時，分數框會轉為綠色。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Pass threshold" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="及格門檻" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="PronThresholdSlider" Minimum="0" Maximum="100" Width="200"
                     IsSnapToTickEnabled="False" VerticalAlignment="Center"/>
@@ -50,22 +50,22 @@
             <TextBlock Text="/ 100" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
           </StackPanel>
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Scoring model (audio)" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="評分模型（音訊）" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBox x:Name="PronModelBox" Padding="6,4" MinWidth="200"/>
           </StackPanel>
-          <TextBlock Text="Uses your OpenAI key with an audio-capable model; the recording is sent to OpenAI for scoring and is not stored."
+          <TextBlock Text="使用你的 OpenAI 金鑰與具音訊能力的模型；錄音會送至 OpenAI 評分、不予保存。"
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,3,0,0"/>
         </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Notes / History entries" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="How entry text is shown in the My Notes and History lists."
+          <TextBlock Text="筆記／歷史條目" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="條目文字在「我的筆記」與「歷史」清單中的顯示方式。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Font size" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="字級" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="EntryFontSlider" Minimum="12" Maximum="32" Width="200"
                     IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
@@ -73,11 +73,11 @@
                      TextAlignment="Center" VerticalAlignment="Center"/>
             <TextBlock Text="pt" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
           </StackPanel>
-          <CheckBox x:Name="EntryBoldChk" Content="Bold" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
-          <CheckBox x:Name="EntryWrapChk" Content="Wrap long text (otherwise show one line with …)"
+          <CheckBox x:Name="EntryBoldChk" Content="粗體" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
+          <CheckBox x:Name="EntryWrapChk" Content="長文字換行（否則單行以 … 截斷）"
                     Margin="0,6,0,0" Foreground="{StaticResource PinkText}"/>
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Background opacity" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="背景不透明度" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="EntryOpacitySlider" Minimum="0" Maximum="100" Width="200"
                     IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
@@ -85,18 +85,18 @@
                      TextAlignment="Center" VerticalAlignment="Center"/>
             <TextBlock Text="%" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
           </StackPanel>
-          <TextBlock Text="Card background opacity, applied the same to both My Notes and History entries. 0% = fully transparent (mascot shows through); 100% = solid."
+          <TextBlock Text="卡片背景不透明度，對「我的筆記」與「歷史」條目一致套用。0% ＝ 完全透明（透出吉祥物）；100% ＝ 不透明。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Video subtitle" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="Font of the current-line subtitle shown under the video player (the big tap-a-word line)."
+          <TextBlock Text="影片字幕" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="影片播放器下方目前字幕行（可點字的大字行）的字型。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Font size" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="字級" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="SubtitleFontSlider" Minimum="12" Maximum="48" Width="200"
                     IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
@@ -104,17 +104,17 @@
                      TextAlignment="Center" VerticalAlignment="Center"/>
             <TextBlock Text="pt" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
           </StackPanel>
-          <CheckBox x:Name="SubtitleBoldChk" Content="Bold" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
+          <CheckBox x:Name="SubtitleBoldChk" Content="粗體" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
         </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Video search results" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="Thumbnail size in the video search results table. Larger is easier to preview; the row height and width scale together (16:9)."
+          <TextBlock Text="影片清單縮圖" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="影片清單中縮圖的大小。越大越好預覽；列高與寬度一同縮放（16:9）。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Thumbnail height" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="縮圖高度" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="ThumbSizeSlider" Minimum="28" Maximum="120" Width="200"
                     IsSnapToTickEnabled="True" TickFrequency="2" VerticalAlignment="Center"/>
@@ -127,11 +127,11 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="Dictionary result" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="Base font size of the Dictionary result. The phonetic and Chinese lines scale with it."
+          <TextBlock Text="字典結果" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="字典結果的基準字級。音標與中文行會隨之縮放。"
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,10,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Font size" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="字級" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,10,0"/>
             <Slider x:Name="ResultFontSlider" Minimum="16" Maximum="40" Width="200"
                     IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
@@ -143,7 +143,7 @@
       </Border>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-        <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource PinkButton}"/>
+        <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource PinkButton}"/>
       </StackPanel>
 
     </StackPanel>

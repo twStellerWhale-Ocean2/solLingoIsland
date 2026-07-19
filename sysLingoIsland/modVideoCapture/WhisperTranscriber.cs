@@ -44,13 +44,13 @@ public sealed class WhisperTranscriber : IAudioTranscriber
     {
         if (string.IsNullOrWhiteSpace(videoUrlOrId))
         {
-            throw new TranscribeException("Please load a YouTube video first.");
+            throw new TranscribeException("請先載入 YouTube 影片。");
         }
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
             throw new TranscribeException(
-                "OPENAI_API_KEY environment variable is not set — cannot transcribe audio. Set it and restart.");
+                "尚未設定 OPENAI_API_KEY 環境變數，無法轉錄音訊。請設定後重新啟動應用程式。");
         }
 
         var url = videoUrlOrId.Trim();
@@ -59,19 +59,19 @@ public sealed class WhisperTranscriber : IAudioTranscriber
         try
         {
             // 1) 下載音訊：僅抽音、降頻 16kHz 單聲道 mp3（Whisper 內部即以 16kHz 處理，降頻不損辨識、體積大減）。
-            progress?.Report("Downloading audio…");
+            progress?.Report("下載音訊中…");
             var audioTemplate = Path.Combine(dir, "audio.%(ext)s");
             var (dlExit, _, dlErr) = await RunAsync(_ytDlpPath,
                 $"-x --audio-format mp3 --postprocessor-args \"ffmpeg:-ac 1 -ar 16000\" --no-playlist -o \"{audioTemplate}\" \"{url}\"",
-                _timeoutSec, "Downloading audio", ct);
+                _timeoutSec, "下載音訊", ct);
             var audio = Directory.EnumerateFiles(dir, "audio.*")
                 .FirstOrDefault(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
                 ?? Directory.EnumerateFiles(dir, "audio.*").FirstOrDefault();
             if (audio is null)
             {
                 throw new TranscribeException(dlExit != 0
-                    ? "Could not download the audio: " + FirstMeaningfulLine(dlErr)
-                    : "Audio was downloaded but no audio file was produced (is ffmpeg installed?).");
+                    ? "無法下載音訊：" + FirstMeaningfulLine(dlErr)
+                    : "已下載音訊，但未產生任何音檔（是否已安裝 ffmpeg？）。");
             }
 
             // 2) 取時長：ffprobe（供切塊規劃與實際費用計算）；失敗退回 0（單塊整檔送）。
@@ -82,7 +82,7 @@ public sealed class WhisperTranscriber : IAudioTranscriber
             var allSegments = new List<(double ChunkStartSec, IReadOnlyList<WhisperSegment> Segments)>();
             if (plan.Count <= 1)
             {
-                progress?.Report("Transcribing audio…");
+                progress?.Report("轉錄音訊中…");
                 var segs = await TranscribeFileAsync(audio, key!, ct);
                 allSegments.Add((0.0, segs));
             }
@@ -92,16 +92,16 @@ public sealed class WhisperTranscriber : IAudioTranscriber
                 {
                     ct.ThrowIfCancellationRequested();
                     var (start, dur) = plan[i];
-                    progress?.Report($"Transcribing part {i + 1}/{plan.Count}…");
+                    progress?.Report($"轉錄第 {i + 1}/{plan.Count} 部分…");
                     var chunkPath = Path.Combine(dir, $"chunk-{i:D3}.mp3");
                     var (fxExit, _, fxErr) = await RunAsync(_ffmpegPath,
                         $"-hide_banner -loglevel error -i \"{audio}\" -ss {Sec(start)} -t {Sec(dur)} -ac 1 -ar 16000 -y \"{chunkPath}\"",
-                        _timeoutSec, "Splitting audio", ct);
+                        _timeoutSec, "切割音訊", ct);
                     if (!File.Exists(chunkPath))
                     {
                         throw new TranscribeException(fxExit != 0
-                            ? "Could not split the audio: " + FirstMeaningfulLine(fxErr)
-                            : "ffmpeg produced no chunk (is ffmpeg installed?).");
+                            ? "無法切割音訊：" + FirstMeaningfulLine(fxErr)
+                            : "ffmpeg 未產生任何音訊分塊（是否已安裝 ffmpeg？）。");
                     }
                     var segs = await TranscribeFileAsync(chunkPath, key!, ct);
                     allSegments.Add((start, segs));
@@ -112,7 +112,7 @@ public sealed class WhisperTranscriber : IAudioTranscriber
             var cues = MergeSegments(allSegments);
             if (cues.Count == 0)
             {
-                throw new TranscribeException("Transcription returned no speech — the audio may be silent or non-English.");
+                throw new TranscribeException("轉錄未辨識到任何語音——音訊可能為靜音或非英語。");
             }
             // 實際音訊秒數：ffprobe 取得優先；取不到退回**最後一個有值**之句時間（供實際費用估算）。
             // #184：容忍未定時句（取最後有值者、皆無則 0）；Whisper 段本即全定時，行為不變。
@@ -224,18 +224,18 @@ public sealed class WhisperTranscriber : IAudioTranscriber
         }
         catch (OperationCanceledException)
         {
-            throw new TranscribeException($"Transcription timed out ({_timeoutSec}s).");
+            throw new TranscribeException($"轉錄逾時（{_timeoutSec} 秒）。");
         }
         catch (HttpRequestException ex)
         {
-            throw new TranscribeException("Network error while transcribing audio: " + ex.Message);
+            throw new TranscribeException("轉錄音訊時發生網路錯誤：" + ex.Message);
         }
         using (resp)
         {
             var json = await resp.Content.ReadAsStringAsync(ct);
             if (!resp.IsSuccessStatusCode)
             {
-                throw new TranscribeException($"OpenAI responded {(int)resp.StatusCode} while transcribing audio.");
+                throw new TranscribeException($"轉錄音訊時 OpenAI 回應 {(int)resp.StatusCode}。");
             }
             return ParseSegments(json);
         }
@@ -248,7 +248,7 @@ public sealed class WhisperTranscriber : IAudioTranscriber
         {
             var (exit, stdout, _) = await RunAsync(_ffprobePath,
                 $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{audioPath}\"",
-                60, "Probing audio", ct);
+                60, "偵測音訊", ct);
             if (exit == 0 && double.TryParse(stdout.Trim(), System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out var sec) && sec > 0)
             {
@@ -282,11 +282,11 @@ public sealed class WhisperTranscriber : IAudioTranscriber
         }
         catch (Exception ex)
         {
-            throw new TranscribeException($"{Path.GetFileNameWithoutExtension(exe)} could not be started (ensure it is installed and on PATH): " + ex.Message);
+            throw new TranscribeException($"{Path.GetFileNameWithoutExtension(exe)} 無法啟動（請確認已安裝並加入 PATH）：" + ex.Message);
         }
         if (p is null)
         {
-            throw new TranscribeException($"{Path.GetFileNameWithoutExtension(exe)} could not be started (ensure it is installed and on PATH).");
+            throw new TranscribeException($"{Path.GetFileNameWithoutExtension(exe)} 無法啟動（請確認已安裝並加入 PATH）。");
         }
         using (p)
         {
@@ -303,7 +303,7 @@ public sealed class WhisperTranscriber : IAudioTranscriber
                 try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
                 if (!ct.IsCancellationRequested)
                 {
-                    throw new TranscribeException($"{what} timed out ({timeoutSec}s).");
+                    throw new TranscribeException($"{what}逾時（{timeoutSec} 秒）。");
                 }
                 throw;
             }
@@ -315,7 +315,7 @@ public sealed class WhisperTranscriber : IAudioTranscriber
 
     private static string FirstMeaningfulLine(string s)
     {
-        var line = s.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "unknown error";
+        var line = s.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "未知錯誤";
         return line.Length > 200 ? line[..200] + "…" : line;
     }
 }

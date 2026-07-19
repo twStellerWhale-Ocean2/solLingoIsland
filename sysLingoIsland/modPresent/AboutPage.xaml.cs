@@ -17,7 +17,7 @@ public partial class AboutPage : UserControl
     {
         InitializeComponent();
         var ver = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = "Version v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
+        VersionText.Text = "版本 v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
         // 更新紀錄改按鈕跳出獨立視窗（#159）——不再常駐佔頁
         ChangeLogBtn.Click += (_, _) =>
             new ChangeLogWindow { Owner = System.Windows.Window.GetWindow(this) }.ShowDialog();

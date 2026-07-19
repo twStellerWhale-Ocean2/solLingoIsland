@@ -44,7 +44,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <Button x:Name="NewFolderBtn" Grid.Row="0" Content="＋ New Folder" Style="{StaticResource GhostButton}"
+      <Button x:Name="NewFolderBtn" Grid.Row="0" Content="＋ 新增資料夾" Style="{StaticResource GhostButton}"
               HorizontalAlignment="Left" Padding="10,4" Margin="0,0,0,6"/>
       <Border Grid.Row="1" Style="{StaticResource Card}">
         <!-- USR：長資料夾名自動分行——停用水平捲軸使列寬受欄寬約束（配合 MakeItem 列拉伸＋名稱 TextWrapping） -->
@@ -64,21 +64,21 @@
       <!-- 條目工具列（#126：字母／日期／自訂 三顆 toggle 排序鈕＋Clear Practice；WrapPanel 換行——窄欄全可視可點） -->
       <WrapPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
         <!-- #126：四排序鈕收為三顆 toggle——內容（含方向字圖 ▲/▼）、粗體、深色由程式依 f.Sort 更新（作用中非顏色線索＝方向字圖存在） -->
-        <Button x:Name="AlphaSortBtn" Content="Abc" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
-                ToolTip="Sort by text (A→Z / Z→A). Click to toggle direction — a view only; your custom drag order is kept."/>
-        <Button x:Name="TimeSortBtn" Content="Date" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
-                ToolTip="Sort by date added (new→old / old→new). Click to toggle direction — a view only; your custom order is kept."/>
-        <Button x:Name="ManualSortBtn" Content="Custom" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
-                ToolTip="Custom order — your own drag order (normal / reversed). Dragging a card switches to this mode."/>
-        <Button x:Name="ClearPracticeBtn" Content="Clear Practice"
-                ToolTip="Reset every pronunciation-practice score box in this folder (notes are kept)"
+        <Button x:Name="AlphaSortBtn" Content="字母" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="依文字排序（A→Z／Z→A）。點擊可切換方向——僅改變檢視；你的自訂拖曳順序會保留。"/>
+        <Button x:Name="TimeSortBtn" Content="日期" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="依加入日期排序（新→舊／舊→新）。點擊可切換方向——僅改變檢視；你的自訂順序會保留。"/>
+        <Button x:Name="ManualSortBtn" Content="自訂" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="自訂順序——你自己的拖曳順序（正向／反向）。拖曳卡片即切換為此模式。"/>
+        <Button x:Name="ClearPracticeBtn" Content="清除練習紀錄"
+                ToolTip="重設此資料夾內所有發音練習的成績框（保留筆記）"
                 Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="0,0,0,4"/>
       </WrapPanel>
       <Grid Grid.Row="1">
         <ScrollViewer x:Name="EntryScroll" VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
           <StackPanel x:Name="EntryPanel"/>
         </ScrollViewer>
-        <TextBlock x:Name="EmptyHint" Text="No notes in this folder yet. Use “Add to My Notes” on a result or history entry to save one; right-click folders on the left to manage, drag to move."
+        <TextBlock x:Name="EmptyHint" Text="此資料夾尚無筆記。在查詢結果或歷史條目上使用「加入我的筆記」即可儲存；在左側資料夾按右鍵可管理，拖曳即可移動。"
                    Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                    TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
       </Grid>

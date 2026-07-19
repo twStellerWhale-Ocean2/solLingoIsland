@@ -1,7 +1,7 @@
 <Window x:Class="LingoIsland.Present.AiActionWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AI action" Width="460" Height="360"
+        Title="AI 動作" Width="460" Height="360"
         MinWidth="340" MinHeight="240"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         ResizeMode="CanResizeWithGrip"
@@ -24,7 +24,7 @@
         <Border Background="#33B0578D" Height="1" Margin="0,10,0,8"/>
         <TextBlock x:Name="CostText" TextWrapping="Wrap" FontSize="12" Foreground="#B0578D"/>
       </StackPanel>
-      <Button Grid.Row="3" x:Name="ActionBtn" Content="Cancel" Style="{StaticResource GhostButton}"
+      <Button Grid.Row="3" x:Name="ActionBtn" Content="取消" Style="{StaticResource GhostButton}"
               HorizontalAlignment="Right" Margin="0,10,0,0" MinWidth="88"/>
     </Grid>
   </Border>

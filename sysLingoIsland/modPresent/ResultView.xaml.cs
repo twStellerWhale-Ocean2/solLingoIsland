@@ -116,8 +116,8 @@ public partial class ResultView : UserControl
         FolderCombo.Items.Clear();
         // 第一項＝依使用中情境/預設夾（映射 NoteDefaults.FolderName＝""）
         FolderCombo.Items.Add(_activeThemeName.Length > 0
-            ? $"(Active theme: {_activeThemeName})"
-            : "(Default: My Notes)");
+            ? $"（使用中主題：{_activeThemeName}）"
+            : "（預設：My Notes）");
         foreach (var n in _folderNames)
         {
             FolderCombo.Items.Add(n);
@@ -152,7 +152,7 @@ public partial class ResultView : UserControl
     private void BuildSwatches()
     {
         SwatchRow.Children.Clear();
-        SwatchRow.Children.Add(MakeSwatch("None", ""));
+        SwatchRow.Children.Add(MakeSwatch("無", ""));
         foreach (var (name, hex) in NoteColors.Palette)
         {
             SwatchRow.Children.Add(MakeSwatch(name, hex));
@@ -172,7 +172,7 @@ public partial class ResultView : UserControl
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 5, 0),
             Cursor = Cursors.Hand,
-            ToolTip = string.IsNullOrEmpty(hex) ? "No color" : name,
+            ToolTip = string.IsNullOrEmpty(hex) ? "無底色" : NoteColors.DisplayName(name),
             Tag = hex,
         };
         if (string.IsNullOrEmpty(hex))
@@ -317,7 +317,7 @@ public partial class ResultView : UserControl
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
-            Text = "Recognizing & translating…",
+            Text = "辨識與翻譯中…",
             Foreground = Brush("#8A5A6D"),
             FontSize = 22,
         });
@@ -423,21 +423,21 @@ public partial class ResultView : UserControl
         };
         BodyPanel.Children.Add(new TextBlock
         {
-            Text = "Fix the English text, then re-translate:",
+            Text = "修正英文後重新翻譯：",
             Foreground = Brush("#8A5A6D"), FontSize = 13, Margin = new Thickness(0, 0, 0, 6),
         });
         BodyPanel.Children.Add(box);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
         var goBtn = new Button
         {
-            Content = "Re-translate", Padding = new Thickness(14, 6, 14, 6),
+            Content = "重新翻譯", Padding = new Thickness(14, 6, 14, 6),
             Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
             BorderThickness = new Thickness(0), FontSize = 15, Cursor = Cursors.Hand,
         };
         goBtn.Click += (_, _) => CommitEdit(box.Text);
         var cancelBtn = new Button
         {
-            Content = "Cancel", Margin = new Thickness(10, 0, 0, 0), Padding = new Thickness(12, 6, 12, 6),
+            Content = "取消", Margin = new Thickness(10, 0, 0, 0), Padding = new Thickness(12, 6, 12, 6),
             Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
             BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), FontSize = 15, Cursor = Cursors.Hand,
         };
@@ -485,7 +485,7 @@ public partial class ResultView : UserControl
         {
             BodyPanel.Children.Add(new TextBlock
             {
-                Text = "No English text detected",
+                Text = "未偵測到英文文字",
                 Foreground = Brush("#9A6A82"),
                 FontSize = 24,
             });
@@ -496,7 +496,7 @@ public partial class ResultView : UserControl
         // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
         BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", ResultDisplaySettings.PhoneticSize, bold: false, font: "Georgia", topMargin: 6));
-        BodyPanel.Children.Add(PlayRow("▶ Play",
+        BodyPanel.Children.Add(PlayRow("▶ 播音",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
 
@@ -505,7 +505,7 @@ public partial class ResultView : UserControl
 
         // 中文組：中譯 ＋ 中文播放/自動
         BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", ResultDisplaySettings.TranslationSize, bold: false));
-        BodyPanel.Children.Add(PlayRow("▶ Play",
+        BodyPanel.Children.Add(PlayRow("▶ 播音",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
             AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
     }
@@ -516,7 +516,7 @@ public partial class ResultView : UserControl
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
-            Text = "Query failed",
+            Text = "查詢失敗",
             Foreground = Brush("#C0506D"),
             FontSize = 24,
             FontWeight = FontWeights.SemiBold,
@@ -550,7 +550,7 @@ public partial class ResultView : UserControl
 
         var chk = new CheckBox
         {
-            Content = "Auto-play",
+            Content = "自動播放",
             IsChecked = autoInit,
             Foreground = Brush("#8A5A6D"),
             FontSize = 14, // 自動播放勾選比照一般內文字級（USR 回饋）
@@ -591,7 +591,7 @@ public partial class ResultView : UserControl
                 Foreground = Brush("#3A2C33"), // 維持大字原色，不用預設藍色連結色
                 TextDecorations = WordUnderline, // 淡粉點狀底線＝可點提示（游標另呈手形）
                 Cursor = Cursors.Hand,
-                ToolTip = $"Click to pronounce · double-click to look up “{word}”",
+                ToolTip = $"單擊發音 · 雙擊查詢「{word}」",
             };
             link.Click += (_, _) => OnWordClick(word); // 單擊＝發音、雙擊＝進一步查詢（v1.0.1）
             tb.Inlines.Add(link);

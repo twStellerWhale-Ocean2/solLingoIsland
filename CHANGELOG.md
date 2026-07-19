@@ -2,6 +2,25 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.5.0] - 2026-07-20
+
+全 app 介面**繁體中文化**（#179，並補齊 epic #178 決策10 之影片頁繁中）：單向繁中、不導入 resx、就地改字串。介面殼由全英文改為全繁中。
+
+### 變更
+- **非影片頁全面繁中**：選項、主題管理、螢幕擷取、結果檢視、筆記、歷史、關於、主視窗分頁（主題／擷取／影片／筆記／歷史／選項／關於／字典）、系統匣選單、更新狀態、`AiActionWindow`、以及查詢／發音服務之使用者可見錯誤訊息。
+- **影片頁亦繁中（補齊 epic #178 決策10）**：獲得（單一輸入框與說明）、內容（影片清單／播放控制／字幕清單）、說話人勾選面板、時間位移、YAML 編修、以及字幕解析／對齊之進度與錯誤訊息（`OpenAiTranscriptAligner`／`WhisperTranscriber`／`TranscriptFetch`／`SubtitleYaml`）。此前 6′ 增量之影片 UI 實以英文撰寫，本次補譯，全 app UI 繁中化完成。
+- **筆記色盤色名顯示繁中**：右鍵色選單與結果視窗色塊 tooltip 經 `NoteColors.DisplayName` 顯示繁中色名（粉紅／粉藍／…）。
+
+### 保留英文（刻意）
+- `NoteColors.Palette` 之**英文色名**作為智能配色「色名↔hex」對應鍵保留（UI 顯示已轉繁中）。
+- **持久化預設資料名** `New Theme`／`My Notes`／`New Folder` 保留——避免遷移既有使用者存檔造成不一致。
+- 專有名詞：LingoIsland／OpenAI／GitHub／Windows／YouTube／Whisper／`OPENAI_API_KEY`／模型 ID／URL／檔名。
+
+### 內部
+- 新增 `NoteColors.DisplayName`（英文盤名→繁中顯示名；僅呈現層，不動 Palette 對應鍵）。
+- `AppStatusText`／`QueryService`／`PronunciationService`／`OpenAiTranscriptAligner` 等使用者可見訊息繁中；AI 提示語（本即中文）、schema 欄位、文化代碼（`en-US`）、YAML 鍵、外部指令參數一律不動。
+- 測試斷言同步繁中（`AppStatusTextTests`／`QueryServiceRetryTests`）；單元測試 648 綠。
+
 ## [3.4.0] - 2026-07-20
 
 影片功能大改（epic #178）增量6′收官〔說話人操作面板＋主題 12 色可編輯色盤〕：字幕清單下方新增可拖拉之**說話人勾選面板**（篩選／暫停／字型色共用單一勾選），主題色改為 **12 色可編輯色盤**（字型色＋AI 記事底色雙軌）。

@@ -35,7 +35,7 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         }
         var key = RequireKey();
 
-        progress?.Report("Organizing the subtitle file into speaker lines…");
+        progress?.Report("正在把字幕檔整理成逐句台詞…");
         var (json, usage) = await CallAsync(key, BuildParseRequest(rawTranscript), ct);
         var usages = new[] { usage with { Model = _parseModel, WebSearch = false } };
         // 審查修：輸出被上限截斷（status=incomplete）＝字幕檔過長、整理結果不可靠（截斷 JSON 解析多為空）。
@@ -43,8 +43,8 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         var truncated = TranscriptAlign.IsTruncated(json);
         var lines = truncated ? Array.Empty<TranscriptLine>() : TranscriptAlign.ParseLines(json);
         progress?.Report(truncated
-            ? "The subtitle file is too long to organize in one pass."
-            : $"Organized {lines.Count} line(s) from the subtitle file.");
+            ? "字幕檔太長，無法一次整理完成。"
+            : $"已從字幕檔整理出 {lines.Count} 句。");
         return new TranscriptParseResult(lines, usages, truncated);
     }
 
@@ -69,7 +69,7 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
             ct.ThrowIfCancellationRequested();
             var offset = ci * TranscriptAlign.ChunkSize;
             var chunk = lines.Skip(offset).Take(TranscriptAlign.ChunkSize).ToList();
-            progress?.Report($"Aligning lines {offset + 1}–{offset + chunk.Count} of {lines.Count} to the audio…");
+            progress?.Report($"正在對齊第 {offset + 1}–{offset + chunk.Count} 句（共 {lines.Count} 句）到聲音…");
             var (json, usage) = await CallAsync(key, BuildAlignRequest(timeline, chunk), ct);
             usages.Add(usage with { Model = _alignModel, WebSearch = false });
             var refs = TranscriptAlign.ParseRefs(json, chunk.Count);
@@ -90,15 +90,15 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
             return new SubtitleExtractResult(Array.Empty<SubtitleCue>(), Array.Empty<SpeakerUsage>());
         }
         var key = RequireKey();
-        progress?.Report("AI is reading the page and extracting the subtitle…");
+        progress?.Report("AI 正在讀取頁面並抽取字幕…");
         var (json, usage) = await CallAsync(key, BuildExtractRequest(rawTranscript), ct);
         var usages = new[] { usage with { Model = _parseModel, WebSearch = false } };
         // 頁面過長→輸出被上限截斷（status=incomplete）→ 結果不可靠,回 Truncated 讓呼叫端仍記費用、給明確錯誤（同 ParseTranscriptAsync）。
         var truncated = TranscriptAlign.IsTruncated(json);
         var cues = truncated ? Array.Empty<SubtitleCue>() : TranscriptAlign.ParseExtractedCues(json);
         progress?.Report(truncated
-            ? "This page is too long to extract in one pass."
-            : $"Extracted {cues.Count} line(s) from the page.");
+            ? "此頁面太長，無法一次抽取完成。"
+            : $"已從頁面抽取 {cues.Count} 句。");
         return new SubtitleExtractResult(cues, usages, truncated);
     }
 
@@ -107,7 +107,7 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
         {
-            throw new SpeakerEnrichException("OPENAI_API_KEY environment variable is not set — cannot organize or align the subtitle file. Set it and restart.");
+            throw new SpeakerEnrichException("尚未設定 OPENAI_API_KEY 環境變數，無法整理或對齊字幕檔。請設定後重新啟動應用程式。");
         }
         return key!;
     }
@@ -239,9 +239,9 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (OperationCanceledException) when (attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; } // 逾時→退避重試
-            catch (OperationCanceledException) { throw new SpeakerEnrichException($"Subtitle organizing/aligning timed out ({_timeoutSec}s)."); }
+            catch (OperationCanceledException) { throw new SpeakerEnrichException($"字幕整理／對齊逾時（{_timeoutSec} 秒）。"); }
             catch (HttpRequestException) when (attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; }         // 連線錯→退避重試
-            catch (HttpRequestException ex) { throw new SpeakerEnrichException("Network error while organizing/aligning the subtitle file: " + ex.Message); }
+            catch (HttpRequestException ex) { throw new SpeakerEnrichException("整理／對齊字幕檔時發生網路錯誤：" + ex.Message); }
             using (resp)
             {
                 var json = await resp.Content.ReadAsStringAsync(ct);
@@ -249,7 +249,7 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
                 {
                     var code = (int)resp.StatusCode;
                     if ((code == 429 || code >= 500) && attempt < MaxAttempts) { await BackoffAsync(attempt, ct); continue; } // 429／5xx＝暫態→退避重試
-                    throw new SpeakerEnrichException($"OpenAI responded {code} while organizing/aligning the subtitle file: " + Truncate(json, 300));
+                    throw new SpeakerEnrichException($"整理／對齊字幕檔時 OpenAI 回應 {code}：" + Truncate(json, 300));
                 }
                 var usage = SpeakerInference.ParseUsage(json) ?? new SpeakerUsage(0, 0, 0);
                 return (json, usage);

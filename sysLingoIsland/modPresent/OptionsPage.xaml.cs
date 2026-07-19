@@ -26,7 +26,7 @@ public partial class OptionsPage : UserControl
         InitializeComponent();
         Config = current;
 
-        VoiceBox.Items.Add(new ComboBoxItem { Content = "(System default English voice)", Tag = DefaultVoiceTag });
+        VoiceBox.Items.Add(new ComboBoxItem { Content = "（系統預設英文語音）", Tag = DefaultVoiceTag });
         foreach (var v in SpeechService.InstalledVoiceNames())
         {
             VoiceBox.Items.Add(new ComboBoxItem { Content = v, Tag = v });
@@ -61,7 +61,7 @@ public partial class OptionsPage : UserControl
     {
         Config = c;
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "Status: ○ Not set" : "Status: ● Set";
+        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "狀態：○ 未設定" : "狀態：● 已設定";
         SelectByTag(VoiceBox, c.Voice ?? DefaultVoiceTag);
         QueryModelBox.Text = c.Model;
         PronThresholdSlider.Value = c.PronPassThreshold; // ValueChanged 同步數值框
@@ -207,7 +207,7 @@ public partial class OptionsPage : UserControl
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("Save failed: " + ex.Message, "LingoIsland Options");
+            System.Windows.MessageBox.Show("儲存失敗：" + ex.Message, "LingoIsland 選項");
             return false;
         }
     }
@@ -224,7 +224,7 @@ public partial class OptionsPage : UserControl
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("Test failed: " + ex.Message, "LingoIsland Options");
+            System.Windows.MessageBox.Show("測試失敗：" + ex.Message, "LingoIsland 選項");
         }
     }
 }

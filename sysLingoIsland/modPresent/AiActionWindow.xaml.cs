@@ -67,8 +67,8 @@ public partial class AiActionWindow : Window
             if (_showCost) { ShowCost(usages); } else { CostText.Visibility = System.Windows.Visibility.Collapsed; }
             ok = true;
         }
-        catch (OperationCanceledException) { Append("Canceled."); }
-        catch (Exception ex) { Append("Failed: " + ex.Message); } // SpeakerEnrichException 訊息即人類可讀
+        catch (OperationCanceledException) { Append("已取消。"); }
+        catch (Exception ex) { Append("失敗：" + ex.Message); } // SpeakerEnrichException 訊息即人類可讀
         finally
         {
             if (ok && _autoClose) { Close(); } else { Finish(); } // 進度視窗成功即自動關；否則留 OK
@@ -77,7 +77,7 @@ public partial class AiActionWindow : Window
 
     private void ShowCost(IReadOnlyList<AiUsage>? usages)
     {
-        if (usages is null || usages.Count == 0) { CostText.Text = "AI cost: no usage was reported."; return; }
+        if (usages is null || usages.Count == 0) { CostText.Text = "AI 費用：未回報用量。"; return; }
         var inTot = usages.Sum(u => u.InputTokens);
         var outTot = usages.Sum(u => u.OutputTokens);
         double costSum = 0; var anyUnknown = false; var anyWeb = false;
@@ -88,18 +88,18 @@ public partial class AiActionWindow : Window
             if (u.WebSearch) { anyWeb = true; }
         }
         var twd = AiCost.ToTwd(costSum);
-        var tokens = $"Tokens: {inTot:N0} in + {outTot:N0} out across {usages.Count} call(s)";
+        var tokens = $"Tokens：{inTot:N0} 輸入 + {outTot:N0} 輸出，共 {usages.Count} 次呼叫";
         var cost = anyUnknown
             ? $"估算 AI 費用 ≈ 約 NT${twd:0.##}+（部分模型無單價）"
             : $"估算 AI 費用 ≈ 約 NT${twd:0.##}";
         if (anyWeb) { cost += "（含網搜工具費）"; }
-        CostText.Text = $"{tokens}.\n{cost}\n（估算，匯率約 US$1≈NT${AiCost.UsdToTwd:0}；實際請以 OpenAI 現價與匯率為準）";
+        CostText.Text = $"{tokens}。\n{cost}\n（估算，匯率約 US$1≈NT${AiCost.UsdToTwd:0}；實際請以 OpenAI 現價與匯率為準）";
     }
 
     private void Finish()
     {
         _done = true;
-        ActionBtn.Content = "OK";
+        ActionBtn.Content = "確定";
         ActionBtn.IsEnabled = true;
     }
 

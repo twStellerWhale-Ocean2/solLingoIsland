@@ -48,16 +48,16 @@
     <Grid Grid.Row="0">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
       <StackPanel Orientation="Horizontal" Margin="14,8,16,8" VerticalAlignment="Center">
-        <Button x:Name="BackBtn" Style="{StaticResource NavButton}" Content="&#xE76B;" ToolTip="Back (return to previous)"/>
-        <Button x:Name="ForwardBtn" Style="{StaticResource NavButton}" Content="&#xE76C;" Margin="6,0,0,0" ToolTip="Forward"/>
+        <Button x:Name="BackBtn" Style="{StaticResource NavButton}" Content="&#xE76B;" ToolTip="返回（回上一個）"/>
+        <Button x:Name="ForwardBtn" Style="{StaticResource NavButton}" Content="&#xE76C;" Margin="6,0,0,0" ToolTip="前進"/>
         <Button x:Name="EditBtn" Style="{StaticResource NavButton}" Content="&#xE70F;" Margin="16,0,0,0"
-                ToolTip="Edit the English text and re-translate"/>
-        <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="16,0,6,0"/>
+                ToolTip="編輯英文並重新翻譯"/>
+        <TextBlock Text="加入至" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="16,0,6,0"/>
         <ComboBox x:Name="FolderCombo" MinWidth="110" MaxWidth="160" FontSize="12.5" VerticalAlignment="Center"/>
         <!-- 播音速度（v1.0.1，USR 回饋）：50–150% 下拉、每 10% 一階，套用於 Play／單字發音；session 內記憶（比照 AutoPlaySettings） -->
-        <TextBlock Text="Speed" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="12,0,5,0"/>
+        <TextBlock Text="速度" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="12,0,5,0"/>
         <ComboBox x:Name="SpeedCombo" AutomationProperties.AutomationId="SpeedCombo" Width="64" FontSize="12.5" VerticalAlignment="Center"
-                  ToolTip="Playback speed for Play and word pronunciation (50–150%)">
+                  ToolTip="播音與單字發音的播放速度（50–150%）">
           <ComboBoxItem Content="50%"/>
           <ComboBoxItem Content="60%"/>
           <ComboBoxItem Content="70%"/>
@@ -84,14 +84,14 @@
       <ComboBox x:Name="InputBox" Grid.Column="0" FontSize="16" IsEditable="True"
                 StaysOpenOnEdit="True" IsTextSearchEnabled="True" VerticalContentAlignment="Center"
                 HorizontalContentAlignment="Stretch"
-                ToolTip="Type English or pick from history, then Look up (Enter)">
+                ToolTip="輸入英文或從歷史挑選，再按查詢（Enter）">
         <ComboBox.ItemTemplate>
           <DataTemplate>
             <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/>
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>
-      <Button x:Name="LookupBtn" Grid.Column="1" Content="Look up" Margin="8,0,0,0"
+      <Button x:Name="LookupBtn" Grid.Column="1" Content="查詢" Margin="8,0,0,0"
               Padding="16,5" FontSize="14" Style="{StaticResource GhostButton}"/>
     </Grid>
 
@@ -105,12 +105,12 @@
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
       <StackPanel Margin="16,10,16,12">
         <StackPanel Orientation="Horizontal">
-          <Button x:Name="AddNoteBtn" Cursor="Hand" ToolTip="Add to My Notes">
+          <Button x:Name="AddNoteBtn" Cursor="Hand" ToolTip="加入我的筆記">
             <Button.Template>
               <ControlTemplate TargetType="Button">
                 <Border x:Name="bg" CornerRadius="8" Background="#E9F6EE" BorderBrush="#C9E6D3"
                         BorderThickness="1" Padding="12,5">
-                  <TextBlock Text="＋ Add to My Notes" FontSize="13.5" Foreground="#2F6F4A"/>
+                  <TextBlock Text="＋ 加入我的筆記" FontSize="13.5" Foreground="#2F6F4A"/>
                 </Border>
                 <ControlTemplate.Triggers>
                   <Trigger Property="IsMouseOver" Value="True">
@@ -120,11 +120,11 @@
               </ControlTemplate>
             </Button.Template>
           </Button>
-          <CheckBox x:Name="AutoAddChk" Content="Auto-add to Notes" Margin="14,0,0,0"
+          <CheckBox x:Name="AutoAddChk" Content="自動加入筆記" Margin="14,0,0,0"
                     VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
         </StackPanel>
         <DockPanel Margin="0,8,0,0">
-          <TextBlock DockPanel.Dock="Left" Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
+          <TextBlock DockPanel.Dock="Left" Text="底色" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
           <WrapPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
         </DockPanel>
       </StackPanel>

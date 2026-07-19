@@ -123,7 +123,7 @@ public partial class HistoryPage : UserControl
 
     private void OnClearAll(object? sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Clear all query history? This cannot be undone.", "Clear All",
+        if (MessageBox.Show("確定要清除全部查詢歷史嗎？此操作無法復原。", "全部清除",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -142,7 +142,7 @@ public partial class HistoryPage : UserControl
             FontWeight = FontWeights.SemiBold,
             Foreground = Brush("#3A2C33"),
         });
-        sp.Children.Add(new TextBlock { Text = $"{g.Entries.Count} item" + (g.Entries.Count == 1 ? "" : "s"), FontSize = 11, Foreground = Brush("#8A5A6D") });
+        sp.Children.Add(new TextBlock { Text = $"{g.Entries.Count} 項", FontSize = 11, Foreground = Brush("#8A5A6D") });
         return sp;
     }
 
@@ -179,7 +179,7 @@ public partial class HistoryPage : UserControl
 
         var text = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(entry.Original) ? "(No English text detected)" : entry.Original,
+            Text = string.IsNullOrWhiteSpace(entry.Original) ? "（未偵測到英文文字）" : entry.Original,
             FontSize = EntryDisplaySettings.FontSize, // #複查：選項頁「條目顯示」可調字級/粗體/換行
             FontWeight = EntryDisplaySettings.Bold ? System.Windows.FontWeights.SemiBold : System.Windows.FontWeights.Normal,
             Foreground = Brush("#3A2C33"),
@@ -208,7 +208,7 @@ public partial class HistoryPage : UserControl
             Margin = new Thickness(6, 0, 0, 0),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "Play",
+            ToolTip = "播音",
         };
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         Grid.SetColumn(playBtn, 2);
@@ -234,16 +234,16 @@ public partial class HistoryPage : UserControl
     private ContextMenu MakeEntryMenu(HistoryEntry entry, Border card)
     {
         var menu = new ContextMenu();
-        var play = new MenuItem { Header = "▶ Play", Foreground = Brush("#2F6FED") };
+        var play = new MenuItem { Header = "▶ 播音", Foreground = Brush("#2F6FED") };
         play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
-        var view = new MenuItem { Header = "View" };
+        var view = new MenuItem { Header = "檢視" };
         view.Click += (_, _) => ViewRequested?.Invoke(entry);
-        var edit = new MenuItem { Header = "Edit text" }; // 複查回饋：校正原文→自動重譯更新中文
+        var edit = new MenuItem { Header = "編輯文字" }; // 複查回饋：校正原文→自動重譯更新中文
         // 直接捕捉 card；MenuItem.Parent 對 ContextMenu 頂層項常回 null，不可靠。
         edit.Click += (_, _) => BeginEntryEdit(card, entry);
-        var addNote = new MenuItem { Header = "Add to Notes", Foreground = Brush("#2F6F4A") };
+        var addNote = new MenuItem { Header = "加入筆記", Foreground = Brush("#2F6F4A") };
         addNote.Click += (_, _) => AddToNotesRequested?.Invoke(entry);
-        var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { _store.Delete(entry.Id); Reload(); };
         menu.Items.Add(play);
         menu.Items.Add(view);
@@ -269,14 +269,14 @@ public partial class HistoryPage : UserControl
         };
         var save = new Button
         {
-            Content = "Save & re-translate", Padding = new Thickness(10, 4, 10, 4),
+            Content = "儲存並重新翻譯", Padding = new Thickness(10, 4, 10, 4),
             Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
             BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
         };
         save.Click += (_, _) => EntryEditRequested?.Invoke(entry.Id, box.Text);
         var cancel = new Button
         {
-            Content = "Cancel", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
+            Content = "取消", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
             Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
             BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
         };
