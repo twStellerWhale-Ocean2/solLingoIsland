@@ -98,12 +98,15 @@ public static class SubtitleParser
     /// <summary>
     /// 補抽「<c>NAME: 台詞</c>」行首前綴之說話人（epic #178 增量6′-B「時間 pivot」定案——字幕檔自帶時間＋說話人、直接載入）：
     /// 除 VTT <c>&lt;v Name&gt;</c> 外,字幕檔常以行首「<c>Ryder: …</c>」「<c>CAP'N TURBOT: …</c>」標說話人。
-    /// 僅在該句**尚無說話人**（未由 <c>&lt;v&gt;</c> 取得）時套用;名字須**大寫開頭、≤3 詞、≤24 字、不含逗號等句子標點**,避免把「Well: …」誤判成說話人。純函式、internal 供單元測試。
+    /// 僅在該句**尚無說話人**（未由 <c>&lt;v&gt;</c> 取得）時套用;名字須**大寫開頭、≤3 詞、≤24 字、不含逗號等句子標點**,避免把「Well: …」誤判成說話人。
+    /// <b>#193 合唸說話人</b>：名字字元類納入 <c>/</c> 與 <c>&amp;</c>,使自製字幕檔常見之「<c>Peppa/Suzy:</c>」「<c>Tom &amp; Jerry:</c>」抽得出來——
+    /// 抽出後交既有 <see cref="PauseDecider.SplitSpeakers"/> 拆為原子說話人（其連接詞正則本已含 <c>/</c>、<c>&amp;</c>,即**設計本已支援合唸,缺口僅在抽取端**)。
+    /// <b>不納入 <c>,</c></b>——逗號為句子標點,納入會把「<c>Yes, Mummy: …</c>」誤判成說話人;<c>≤3</c> 詞與 <c>≤24</c> 字之防誤判限制亦保留不放寬。純函式、internal 供單元測試。
     /// </summary>
     internal static IReadOnlyList<SubtitleCue> ExtractInlineSpeakers(IReadOnlyList<SubtitleCue> cues)
     {
         // 名字後容忍冒號前空白（表格逐字稿常「Speaker : 台詞」）。\s* 在冒號前。
-        var re = new Regex(@"^(?<who>\p{Lu}[\p{L}\p{M}0-9'.\- ]{0,22}[\p{L}0-9.])\s*:\s+(?<line>\S.*)$", RegexOptions.Compiled);
+        var re = new Regex(@"^(?<who>\p{Lu}[\p{L}\p{M}0-9'.\-/& ]{0,22}[\p{L}0-9.])\s*:\s+(?<line>\S.*)$", RegexOptions.Compiled);
         var result = new List<SubtitleCue>(cues.Count);
         foreach (var c in cues)
         {
