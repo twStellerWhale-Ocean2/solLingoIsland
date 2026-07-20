@@ -58,13 +58,13 @@
     <rect x="36" y="277" width="560" height="22" rx="4" fill="#FFFFFF" opacity="0.75"/>
     <text x="46" y="292" fill="#3a3a3a">peppa_s01e03_best_friend.srt</text>
     <text x="330" y="292" fill="#9a8a90">（自檔頭偵測）</text>
-    <text x="440" y="292" fill="#4a7a4a">&#10003; 就緒 &#183; 89 句 &#183; 6 位說話人</text>
+    <text x="440" y="292" fill="#4a7a4a">&#10003; 就緒 &#183; 已取得影片 ID</text>
     <text x="590" y="292" fill="#9a8a90" text-anchor="end">&#10005;</text>
 
     <rect x="36" y="302" width="560" height="22" rx="4" fill="#FFFFFF" opacity="0.75"/>
     <text x="46" y="317" fill="#3a3a3a">peppa_s01e06_the_playgroup.srt</text>
     <text x="330" y="317" fill="#9a8a90">（自檔頭偵測）</text>
-    <text x="440" y="317" fill="#4a7a4a">&#10003; 就緒 &#183; 94 句 &#183; 7 位說話人</text>
+    <text x="440" y="317" fill="#4a7a4a">&#10003; 就緒 &#183; 已取得影片 ID</text>
     <text x="590" y="317" fill="#9a8a90" text-anchor="end">&#10005;</text>
 
     <rect x="36" y="327" width="560" height="22" rx="4" fill="#FFE9C8" opacity="0.8"/>
@@ -92,6 +92,6 @@
 
   <!-- status bar -->
   <rect x="0" y="462" width="640" height="18" fill="#F4C2D0" opacity="0.5"/>
-  <text x="8" y="475" font-size="8.5" fill="#7a3b55">已選 5 檔（3 就緒 &#183; 2 需處理）&#183; 自檔頭取得影片網址 &#183; 免費解析、未使用 AI</text>
+  <text x="8" y="475" font-size="8.5" fill="#7a3b55">已選 5 檔（3 就緒 &#183; 2 需處理）&#183; 影片網址取自檔頭 &#183; 按下主鈕後才解析，句數與說話人於彙總確認表呈現</text>
   <text x="632" y="475" font-size="8" fill="#8a5a6e" text-anchor="end">清單資料為示意值</text>
 </svg>
