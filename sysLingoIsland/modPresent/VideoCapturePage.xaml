@@ -54,7 +54,9 @@
     <Grid Grid.Row="1">
 
       <!-- 【獲得】關鍵字搜尋＋結果表格＋網址載入 -->
-      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed">
+      <!-- AllowDrop 置於整張卡片（#193 USR 回饋）：拖放範圍＝整個「加入影片」區塊，非僅輸入框；以 Preview 事件於此統一處理，子元素不各自實作 -->
+      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed"
+              AllowDrop="True">
         <StackPanel>
           <TextBlock Text="加入影片" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
 
@@ -67,7 +69,8 @@
           <Grid>
             <TextBox x:Name="AcqInputBox" MinHeight="128" MaxHeight="240" AcceptsReturn="True" TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Padding="8" FontSize="12.5"
-                     Background="#66FFFFFF" ToolTip="貼上 YouTube 影片網址與字幕檔網址（兩者皆須），再按 Enter 或點「加入影片」"/>
+                     Background="#66FFFFFF" AllowDrop="True"
+                     ToolTip="貼上 YouTube 影片網址與字幕檔網址，或把自製字幕檔拖進來（可多檔）；再按 Enter 或點下方按鈕"/>
             <TextBlock x:Name="AcqPlaceholder" IsHitTestVisible="False" Foreground="#B692A6" FontSize="12"
                        Margin="11,9,10,10" VerticalAlignment="Top" TextWrapping="Wrap">
               <Run Text="貼上影片與字幕連結，例如："/><LineBreak/>
@@ -76,14 +79,37 @@
               <Run Text="字幕：https://pawpatrol.fandom.com/wiki/Pups_and_the_Pirate_Treasure/Transcript"/>
             </TextBlock>
           </Grid>
+          <!-- 本機自製字幕檔（#193）：選檔鈕與已選清單**緊鄰同組**（不被其他控制項隔開）；亦可直接拖放至上方輸入框。 -->
+          <TextBlock Margin="0,8,0,0" FontSize="10.5" Foreground="#8A5A6E" TextWrapping="Wrap"
+                     Text="也可以直接給自製字幕檔——按下方按鈕選檔，或把 .srt／.vtt 拖進上面的框（都可一次多檔）。字幕檔若在檔頭寫了影片網址，上面的框可以留空。"/>
+          <Grid Margin="0,6,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="AcqPickBtn" Grid.Column="0" Content="&#x1F4C4; 選擇字幕檔…" Height="28" Padding="12,0"
+                    ToolTip="選擇一個或多個本機字幕檔（.srt／.vtt／.txt）"/>
+            <TextBlock x:Name="AcqFilesCount" Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                       FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+            <Button x:Name="AcqClearFilesBtn" Grid.Column="2" Content="全部清除" Style="{StaticResource GhostButton}"
+                    Visibility="Collapsed" ToolTip="清空已選字幕檔清單"/>
+          </Grid>
+          <!-- 已選檔清單：**最大高度＋垂直捲動**（主打整季 20–30 集，不得靠版面撐開）；每列只顯檔名（完整路徑僅 tooltip，防截圖外洩絕對路徑） -->
+          <Border x:Name="AcqFilesCard" Style="{StaticResource Card}" Padding="4" Margin="0,6,0,0" Visibility="Collapsed">
+            <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl x:Name="AcqFilesList"/>
+            </ScrollViewer>
+          </Border>
+
           <Grid Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Foreground="#C89AB0" FontSize="10.5" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Text="需要具體的影片網址與字幕檔網址——不做關鍵字搜尋。"/>
-            <Button x:Name="AcqBuildBtn" Grid.Column="1" Content="&#x2699; 加入影片" Width="132" Height="32" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="0" Foreground="#8A5A6E" FontSize="10.5" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Text="需要具體的影片網址與字幕來源——不做關鍵字搜尋。"/>
+            <Button x:Name="AcqBuildBtn" Grid.Column="1" Content="&#xFF0B; 加入影片" MinWidth="152" Height="32" VerticalAlignment="Center"/>
           </Grid>
 
         </StackPanel>
@@ -145,7 +171,7 @@
               <TextBlock x:Name="WatchUrlRow" Margin="0,3,0,0" FontSize="11.5" Foreground="#9A6A82"
                          Visibility="Collapsed" TextTrimming="CharacterEllipsis">
                 <Run Text="網址："/><Hyperlink x:Name="WatchUrlLink" RequestNavigate="OnOpenExternalLink"
-                         Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink>
+                         Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink><Run x:Name="WatchDurationText"/>
               </TextBlock>
             </StackPanel>
 
