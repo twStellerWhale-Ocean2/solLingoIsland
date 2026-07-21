@@ -1466,12 +1466,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                          .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                          .ToList();
         var hasNoSpeaker = _cues.Any(c => string.IsNullOrEmpty(c.Speaker));
+        var lineCounts = SpeakerTally.CountBySpeaker(_cues);                                     // 各原子說話人句數（合唸句各計一次，#196）——僅供顯示
 
         if (atoms.Count > 0 || hasNoSpeaker)
         {
-            _everyoneCheck = AddCheck(new SpeakerCheck(EveryoneSpeaker, isEveryone: true));
-            foreach (var a in atoms) AddCheck(new SpeakerCheck(a) { IsChecked = WasChecked(a) });
-            if (hasNoSpeaker) _noSpeakerCheck = AddCheck(new SpeakerCheck(NoSpeaker, isNoSpeaker: true) { IsChecked = WasChecked(NoSpeaker) });
+            _everyoneCheck = AddCheck(new SpeakerCheck(EveryoneSpeaker, isEveryone: true) { LineCount = SpeakerTally.TotalCount(_cues) });
+            foreach (var a in atoms) AddCheck(new SpeakerCheck(a) { IsChecked = WasChecked(a), LineCount = lineCounts.TryGetValue(a, out var n) ? n : 0 });
+            if (hasNoSpeaker) _noSpeakerCheck = AddCheck(new SpeakerCheck(NoSpeaker, isNoSpeaker: true) { IsChecked = WasChecked(NoSpeaker), LineCount = SpeakerTally.NoSpeakerCount(_cues) });
             _everyoneCheck.IsChecked = _speakerChecks.Where(x => !x.IsEveryone).All(x => x.IsChecked); // 全勾才勾 Everyone
         }
         _populatingModes = false;
@@ -1843,6 +1844,10 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public string Name { get; }
         public bool IsEveryone { get; }
         public bool IsNoSpeaker { get; }
+        /// <summary>此列語句數（#196）——具名＝該說話人句數、全選列＝總句數、無說話人列＝未標句數；由 PopulateSpeakerChecks 於建列時算入。</summary>
+        public int LineCount { get; init; }
+        /// <summary>面板顯示字串（#196）＝名字尾端以括弧顯示語句數。**Name 保持純名字為篩選／暫停／配色／勾選保留之唯一 key，計數只入此顯示屬性、不污染 Name。**</summary>
+        public string DisplayName => $"{Name} ({LineCount})";
         public System.Windows.FontWeight Weight => IsEveryone ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
         /// <summary>「加入筆記」鈕僅具體說話人列顯示（全選列＝(all speakers) 不顯，避免一鍵灌入全部台詞）。</summary>
         public System.Windows.Visibility AddNotesVisibility => IsEveryone ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
