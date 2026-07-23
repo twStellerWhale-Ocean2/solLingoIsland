@@ -52,8 +52,63 @@ public partial class OptionsPage : UserControl
         // 影片搜尋縮圖高度：滑桿↔數值框雙向同步（#複查）
         ThumbSizeSlider.ValueChanged += (_, e) => ThumbSizeBox.Text = ((int)e.NewValue).ToString();
         ThumbSizeBox.LostFocus += (_, _) => SyncThumbSizeFromBox();
+        // 資料備份與搬遷（#206）：即時動作、不走頁尾儲存
+        ExportDataBtn.Click += (_, _) => OnExportData();
+        ImportDataBtn.Click += (_, _) => OnImportData();
 
         SetConfig(current);
+    }
+
+    /// <summary>匯出資料（#206）：整包 %APPDATA%\LingoIsland → 使用者指定之 zip；成功顯路徑、失敗明訊不當機。</summary>
+    private void OnExportData()
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "匯出 LingoIsland 資料",
+            Filter = "備份檔 (*.zip)|*.zip",
+            FileName = LingoIsland.Query.BackupService.DefaultBackupFileName(DateTimeOffset.Now),
+        };
+        if (dlg.ShowDialog(System.Windows.Window.GetWindow(this)) != true) { return; }
+        try
+        {
+            LingoIsland.Query.BackupService.CreateBackup(LingoIsland.Query.BackupService.DefaultDataDir, dlg.FileName);
+            System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+                $"已匯出至：\n{dlg.FileName}\n\n提醒：備份不含 OpenAI API 金鑰（在環境變數）——新電腦需再設定一次。",
+                "匯出完成", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+                $"匯出失敗：{ex.Message}", "匯出資料", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>匯入資料（#206）：確認 → 驗備份 → 解壓覆蓋 → 提示並關閉程式（重啟後套用）；非備份檔／失敗明訊不動資料。</summary>
+    private void OnImportData()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "匯入 LingoIsland 資料",
+            Filter = "備份檔 (*.zip)|*.zip",
+        };
+        if (dlg.ShowDialog(System.Windows.Window.GetWindow(this)) != true) { return; }
+        var go = System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+            "匯入會以備份內容覆蓋本機同名資料（筆記／歷史／主題／截圖／影片與設定），其餘檔案保留。\n建議先「匯出資料…」留存現況。\n\n匯入完成後程式會關閉，請再重新開啟。要繼續嗎？",
+            "匯入資料", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning);
+        if (go != System.Windows.MessageBoxResult.OK) { return; }
+        try
+        {
+            LingoIsland.Query.BackupService.RestoreBackup(dlg.FileName, LingoIsland.Query.BackupService.DefaultDataDir);
+            System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+                "匯入完成。程式即將關閉，請重新開啟 LingoIsland。",
+                "匯入完成", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+                $"匯入失敗：{ex.Message}", "匯入資料", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
     }
 
     /// <summary>以指定組態刷新欄位（啟動與外部變更後呼叫）。</summary>
