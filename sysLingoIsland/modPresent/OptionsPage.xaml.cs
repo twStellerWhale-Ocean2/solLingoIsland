@@ -83,8 +83,8 @@ public partial class OptionsPage : UserControl
         }
     }
 
-    /// <summary>匯入資料（#206）：確認 → 驗備份 → 解壓覆蓋 → 提示並關閉程式（重啟後套用）；非備份檔／失敗明訊不動資料。</summary>
-    private void OnImportData()
+    /// <summary>匯入資料（#206）：確認 → 驗備份 → 先解壓暫存再搬入（解壓失敗不動本機資料）→ 提示並關閉程式（重啟後套用）；還原走背景執行緒、執行中禁用雙鈕。</summary>
+    private async void OnImportData()
     {
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
@@ -96,19 +96,21 @@ public partial class OptionsPage : UserControl
             "匯入會以備份內容覆蓋本機同名資料（筆記／歷史／主題／截圖／影片與設定），其餘檔案保留。\n建議先「匯出資料…」留存現況。\n\n匯入完成後程式會關閉，請再重新開啟。要繼續嗎？",
             "匯入資料", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning);
         if (go != System.Windows.MessageBoxResult.OK) { return; }
+        ExportDataBtn.IsEnabled = ImportDataBtn.IsEnabled = false; // 審查修：還原走背景、大 zip 不凍 UI、防重入
         try
         {
-            LingoIsland.Query.BackupService.RestoreBackup(dlg.FileName, LingoIsland.Query.BackupService.DefaultDataDir);
+            await Task.Run(() => LingoIsland.Query.BackupService.RestoreBackup(dlg.FileName, LingoIsland.Query.BackupService.DefaultDataDir));
             System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
-                "匯入完成。程式即將關閉，請重新開啟 LingoIsland。",
+                "匯入完成。程式即將關閉，請重新開啟 LingoIsland。\n\n提醒：OpenAI API 金鑰不在備份內——新電腦請照「快速開始」再設定 OPENAI_API_KEY。",
                 "匯入完成", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             System.Windows.Application.Current.Shutdown();
         }
         catch (Exception ex)
         {
             System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
-                $"匯入失敗：{ex.Message}", "匯入資料", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                $"匯入失敗：{ex.Message}\n本機資料未被變更（還原於解壓暫存階段即中止）。", "匯入資料", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
         }
+        finally { ExportDataBtn.IsEnabled = ImportDataBtn.IsEnabled = true; }
     }
 
     /// <summary>以指定組態刷新欄位（啟動與外部變更後呼叫）。</summary>

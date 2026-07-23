@@ -62,7 +62,26 @@ public static class BackupService
                 throw new InvalidDataException("不是 LingoIsland 備份檔（zip 根層缺核心資料檔）。");
             }
         }
-        Directory.CreateDirectory(targetDir);
-        ZipFile.ExtractToDirectory(zipPath, targetDir, overwriteFiles: true);
+        // 審查修（#206）：先整包解壓至暫存、成功後才逐檔搬入——解壓中途失敗（CRC 損壞、磁碟滿）不碰本機資料；
+        // 搬入為逐檔覆蓋（非嚴格原子，惟僅剩本機碟對拷、失敗面已大幅收斂）。
+        var tmp = Path.Combine(Path.GetTempPath(), $"lingo-restore-{Guid.NewGuid():N}");
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, tmp);
+            Directory.CreateDirectory(targetDir);
+            CopyOver(new DirectoryInfo(tmp), new DirectoryInfo(targetDir));
+        }
+        finally
+        {
+            try { if (Directory.Exists(tmp)) { Directory.Delete(tmp, true); } } catch { /* 暫存清理盡力 */ }
+        }
+    }
+
+    /// <summary>遞迴逐檔搬入（覆蓋同名、保留其餘；#206 審查修之還原第二階段）。</summary>
+    private static void CopyOver(DirectoryInfo src, DirectoryInfo dst)
+    {
+        Directory.CreateDirectory(dst.FullName);
+        foreach (var f in src.GetFiles()) { f.CopyTo(Path.Combine(dst.FullName, f.Name), overwrite: true); }
+        foreach (var d in src.GetDirectories()) { CopyOver(d, new DirectoryInfo(Path.Combine(dst.FullName, d.Name))); }
     }
 }
